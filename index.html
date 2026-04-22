@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="StockRadar"/>
+  <meta name="theme-color" content="#060b14"/>
+  <title>StockRadar</title>
+  <link rel="manifest" href="manifest.json"/>
+
+  <!-- Apple touch icons -->
+
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <link rel="apple-touch-startup-image" href="icon-512.png"/>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#060b14;font-family:Heebo,system-ui,sans-serif;color:#f7fafc;overscroll-behavior:none}
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-thumb{background:rgba(99,179,237,0.2);border-radius:4px}
+    input:focus{outline:none}
+    input::placeholder{color:rgba(255,255,255,0.25)}
+    @keyframes fadeSlide{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+    @keyframes slideIn{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:translateX(0)}}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ══════════════════════════════════════════
+// CONFIG — שים כאן את ה-API KEY שלך
+// ══════════════════════════════════════════
+const ANTHROPIC_KEY = "YOUR_API_KEY_HERE"; // ← החלף בkey שלך
+
+// ══════════════════════════════════════════
+// LIVE PRICE
+// ══════════════════════════════════════════
+async function fetchLivePrice(ticker) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=2d`;
+    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+    const r = await fetch(proxy, { signal: AbortSignal.timeout(6000) });
+    if (r.ok) {
+      const j = await r.json();
+      const d = JSON.parse(j.contents);
+      const meta = d.chart?.result?.[0]?.meta;
+      if (meta?.regularMarketPrice) {
+        const price = meta.regularMarketPrice;
+        const prev  = meta.chartPreviousClose ?? meta.previousClose ?? price;
+        return { price, change: ((price - prev) / prev) * 100, name: meta.shortName || ticker };
+      }
+    }
+  } catch {}
+  return null;
+}
+
+// ══════════════════════════════════════════
+// AI
+// ══════════════════════════════════════════
+async function callClaude(prompt) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 800,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const d = await r.json();
+  return d.content?.[0]?.text || "";
+}
+
+// ══════════════════════════════════════════
+// TYPEWRITER
+// ══════════════════════════════════════════
+function useTypewriter() {
+  const [text, setText]   = useState("");
+  const [going, setGoing] = useState(false);
+  const iv = useRef(null);
+  const play = useCallback((full) => {
+    clearInterval(iv.current);
+    setText(""); setGoing(true);
+    let i = 0;
+    iv.current = setInterval(() => {
+      i += 3;
+      if (i >= full.length) { setText(full); setGoing(false); clearInterval(iv.current); }
+      else setText(full.slice(0, i));
+    }, 18);
+  }, []);
+  useEffect(() => () => clearInterval(iv.current), []);
+  return { text, going, play };
+}
+
+// ══════════════════════════════════════════
+// CANDLE CHART
+// ══════════════════════════════════════════
+function seededRand(seed) {
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+}
+function generateCandles(ticker, basePrice, days = 60) {
+  const hash = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rand = seededRand(hash * 997);
+  const out = [];
+  let price = basePrice * (0.86 + rand() * 0.05);
+  for (let i = 0; i < days; i++) {
+    const vol = 0.013 + rand() * 0.022;
+    const open = price;
+    const close = open * (1 + (rand() - 0.465) * vol);
+    out.push({ open, close, high: Math.max(open, close) * (1 + rand() * 0.008), low: Math.min(open, close) * (1 - rand() * 0.008) });
+    price = close;
+  }
+  return out;
+}
+function calcSMA(c, p) {
+  return c.map((_, i) => i < p - 1 ? null : c.slice(i - p + 1, i + 1).reduce((a, x) => a + x.close, 0) / p);
+}
+function calcRSI(c, p = 14) {
+  const gains = [], losses = [];
+  for (let i = 1; i < c.length; i++) { const d = c[i].close - c[i-1].close; gains.push(d>0?d:0); losses.push(d<0?-d:0); }
+  return c.map((_, i) => {
+    if (i < p) return null;
+    const g = gains.slice(i-p,i).reduce((a,b)=>a+b,0)/p;
+    const l = losses.slice(i-p,i).reduce((a,b)=>a+b,0)/p;
+    return l===0?100:100-100/(1+g/l);
+  });
+}
+function findLevels(c) {
+  return { resistance: Math.max(...c.slice(-30).map(x=>x.high)), support: Math.min(...c.slice(-30).map(x=>x.low)) };
+}
+
+function CandleChart({ candles, currentPrice }) {
+  const svgRef = useRef(null);
+  const [tip, setTip] = useState(null);
+  const W=560,H=200,P={t:10,r:44,b:26,l:50};
+  const cw=W-P.l-P.r, ch=H-P.t-P.b;
+  const allP = candles.flatMap(c=>[c.high,c.low]);
+  const minP = Math.min(...allP)*0.997, maxP = Math.max(...allP)*1.003;
+  const rng = maxP-minP;
+  const toX = i => P.l+(i/(candles.length-1))*cw;
+  const toY = p => P.t+ch-((p-minP)/rng)*ch;
+  const sma20=calcSMA(candles,20), sma50=calcSMA(candles,50);
+  const lvl=findLevels(candles);
+  const bw=Math.max(2,(cw/candles.length)*0.65);
+  const mkPath = sma => sma.map((v,i)=>v===null?"":`${i===sma.findIndex(x=>x!==null)?"M":"L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const gridPs = Array.from({length:5},(_,i)=>minP+(rng*i)/4);
+  const months=["ינו","פבר","מרץ","אפר","מאי","יונ","יול","אוג","ספט","אוק","נוב","דצ"];
+  const now=new Date();
+  const xLbls=[0,15,30,45,59].map(i=>{const d=new Date(now);d.setDate(d.getDate()-(59-i));return{i,label:`${d.getDate()} ${months[d.getMonth()]}`};});
+  const lastClose=candles[candles.length-1].close;
+  const breakout=lastClose>lvl.resistance*0.999, breakdown=lastClose<lvl.support*1.001;
+  return (
+    <div>
+      <div style={{display:"flex",gap:"10px",flexWrap:"wrap",marginBottom:"6px",alignItems:"center"}}>
+        {[{color:"#63b3ed",label:"SMA 20"},{color:"#f6ad55",label:"SMA 50"},{color:"rgba(252,129,129,0.8)",label:"התנגדות",dash:true},{color:"rgba(104,211,145,0.8)",label:"תמיכה",dash:true}].map(l=>(
+          <div key={l.label} style={{display:"flex",alignItems:"center",gap:"4px"}}>
+            <svg width="14" height="8"><line x1="0" y1="4" x2="14" y2="4" stroke={l.color} strokeWidth="1.5" strokeDasharray={l.dash?"4,3":"none"}/></svg>
+            <span style={{fontSize:"10px",color:"rgba(255,255,255,0.4)"}}>{l.label}</span>
+          </div>
+        ))}
+        {(breakout||breakdown)&&<span style={{fontSize:"11px",fontWeight:"700",color:breakout?"#68d391":"#fc8181",background:breakout?"rgba(104,211,145,0.1)":"rgba(252,129,129,0.1)",padding:"2px 8px",borderRadius:"6px"}}>{breakout?"⚡ פריצה!":"⚠️ שבירה!"}</span>}
+      </div>
+      <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible",cursor:"crosshair"}}
+        onMouseMove={e=>{const r=svgRef.current.getBoundingClientRect();const mx=(e.clientX-r.left)*(W/r.width);const idx=Math.round(((mx-P.l)/cw)*(candles.length-1));if(idx>=0&&idx<candles.length){const c=candles[idx];setTip({idx,...c,x:mx,y:toY(c.close)});}}}
+        onMouseLeave={()=>setTip(null)}>
+        {gridPs.map((p,i)=><g key={i}><line x1={P.l} y1={toY(p)} x2={W-P.r} y2={toY(p)} stroke="rgba(255,255,255,0.04)" strokeWidth="1"/><text x={P.l-4} y={toY(p)+4} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.25)" fontFamily="monospace">{p>=1000?`${(p/1000).toFixed(1)}K`:p.toFixed(2)}</text></g>)}
+        {xLbls.map(({i,label})=><text key={i} x={toX(i)} y={H-4} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.25)">{label}</text>)}
+        <line x1={P.l} y1={toY(lvl.resistance)} x2={W-P.r} y2={toY(lvl.resistance)} stroke="rgba(252,129,129,0.6)" strokeWidth="1" strokeDasharray="5,4"/>
+        <text x={W-P.r+3} y={toY(lvl.resistance)+4} fontSize="8" fill="rgba(252,129,129,0.7)" fontFamily="monospace">{lvl.resistance.toFixed(2)}</text>
+        <line x1={P.l} y1={toY(lvl.support)} x2={W-P.r} y2={toY(lvl.support)} stroke="rgba(104,211,145,0.6)" strokeWidth="1" strokeDasharray="5,4"/>
+        <text x={W-P.r+3} y={toY(lvl.support)+4} fontSize="8" fill="rgba(104,211,145,0.7)" fontFamily="monospace">{lvl.support.toFixed(2)}</text>
+        {candles.map((c,i)=>{const x=toX(i),isUp=c.close>=c.open,color=isUp?"#68d391":"#fc8181";return(<g key={i}><line x1={x} y1={toY(c.high)} x2={x} y2={toY(c.low)} stroke={color} strokeWidth="0.8" opacity="0.8"/><rect x={x-bw/2} y={toY(Math.max(c.open,c.close))} width={bw} height={Math.max(1.5,Math.abs(toY(c.open)-toY(c.close)))} fill={color} opacity={tip&&tip.idx===i?1:0.82}/></g>);})}
+        <path d={mkPath(sma20)} fill="none" stroke="#63b3ed" strokeWidth="1.5" opacity="0.85"/>
+        <path d={mkPath(sma50)} fill="none" stroke="#f6ad55" strokeWidth="1.5" opacity="0.85"/>
+        <line x1={P.l} y1={toY(currentPrice)} x2={W-P.r} y2={toY(currentPrice)} stroke="rgba(255,255,255,0.25)" strokeWidth="1" strokeDasharray="3,3"/>
+        {tip&&(<g>
+          <line x1={toX(tip.idx)} y1={P.t} x2={toX(tip.idx)} y2={H-P.b} stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="3,3"/>
+          <circle cx={toX(tip.idx)} cy={toY(tip.close)} r="3" fill="#63b3ed"/>
+          <rect x={Math.min(toX(tip.idx)+6,W-100)} y={tip.y-38} width="90" height="50" rx="5" fill="rgba(10,15,26,0.95)" stroke="rgba(99,179,237,0.3)" strokeWidth="1"/>
+          <text x={Math.min(toX(tip.idx)+10,W-96)} y={tip.y-22} fontSize="9" fill="rgba(255,255,255,0.5)" fontFamily="monospace">פתיחה: {tip.open.toFixed(2)}</text>
+          <text x={Math.min(toX(tip.idx)+10,W-96)} y={tip.y-11} fontSize="9" fill="rgba(255,255,255,0.5)" fontFamily="monospace">סגירה: {tip.close.toFixed(2)}</text>
+          <text x={Math.min(toX(tip.idx)+10,W-96)} y={tip.y+1} fontSize="9" fill={tip.close>=tip.open?"#68d391":"#fc8181"} fontFamily="monospace">{tip.close>=tip.open?"▲":"▼"} {Math.abs((tip.close-tip.open)/tip.open*100).toFixed(2)}%</text>
+        </g>)}
+      </svg>
+    </div>
+  );
+}
+
+function RSIChart({ candles }) {
+  const W=560,H=52,P={t:4,r:44,b:16,l:50};
+  const cw=W-P.l-P.r,ch=H-P.t-P.b;
+  const rsis=calcRSI(candles);
+  const toX=i=>P.l+(i/(candles.length-1))*cw;
+  const toY=v=>P.t+ch-(v/100)*ch;
+  const path=rsis.map((v,i)=>v===null?"":`${i===rsis.findIndex(x=>x!==null)?"M":"L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const last=rsis.filter(Boolean).pop()||50;
+  const col=last>70?"#fc8181":last<30?"#68d391":"#63b3ed";
+  return (
+    <div style={{marginTop:"4px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:"3px"}}>
+        <span style={{fontSize:"10px",color:"rgba(255,255,255,0.3)"}}>RSI (14)</span>
+        <span style={{fontSize:"11px",fontWeight:"700",color:col,fontFamily:"monospace"}}>{last.toFixed(1)} {last>70?"— קנוי יתר":last<30?"— מכור יתר":"— נייטרל"}</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {[70,50,30].map(v=><g key={v}><line x1={P.l} y1={toY(v)} x2={W-P.r} y2={toY(v)} stroke={v===50?"rgba(255,255,255,0.06)":v===70?"rgba(252,129,129,0.2)":"rgba(104,211,145,0.2)"} strokeWidth="1" strokeDasharray={v!==50?"4,3":"none"}/><text x={P.l-4} y={toY(v)+3} textAnchor="end" fontSize="8" fill="rgba(255,255,255,0.2)" fontFamily="monospace">{v}</text></g>)}
+        <path d={path} fill="none" stroke={col} strokeWidth="1.5" opacity="0.9"/>
+      </svg>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════
+// CHART PANEL
+// ══════════════════════════════════════════
+function ChartPanel({ stock, onClose }) {
+  const { text, going, play } = useTypewriter();
+  const [loading, setLoading] = useState(false);
+  const [liveData, setLiveData] = useState(null);
+  const [liveLoading, setLiveLoading] = useState(true);
+
+  useEffect(() => {
+    fetchLivePrice(stock.ticker).then(d => { setLiveData(d); setLiveLoading(false); });
+  }, [stock.ticker]);
+
+  const price  = liveData?.price  ?? stock.price;
+  const change = liveData?.change ?? stock.change;
+  const candles = generateCandles(stock.ticker, price);
+  const lvl = findLevels(candles);
+  const sma20 = calcSMA(candles,20), sma50 = calcSMA(candles,50);
+  const rsis = calcRSI(candles);
+  const lastRsi = rsis.filter(Boolean).pop()||50;
+
+  const runAnalysis = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await callClaude(
+        `נתח ניתוח טכני של ${stock.ticker} (${stock.name}) בעברית:\nמחיר: $${price.toFixed(2)}, שינוי: ${change.toFixed(2)}%\nתמיכה: $${lvl.support.toFixed(2)}, התנגדות: $${lvl.resistance.toFixed(2)}\nSMA20: $${sma20[sma20.length-1]?.toFixed(2)}, SMA50: $${sma50[sma50.length-1]?.toFixed(2)}, RSI: ${lastRsi.toFixed(1)}\n\n3 פסקאות, ללא כוכביות:\n1. מצב המחיר ביחס לתמיכה/התנגדות\n2. RSI וממוצעים\n3. תרחיש מסחר עם רמות ספציפיות`
+      );
+      play(result);
+    } catch { play("שגיאה."); }
+    setLoading(false);
+  }, [stock.ticker, price]);
+
+  useEffect(() => { if (!liveLoading) runAnalysis(); }, [liveLoading]);
+  const busy = loading || going;
+
+  return (
+    <div dir="rtl" style={{position:"fixed",top:0,right:0,height:"100vh",width:"min(660px,100vw)",background:"#080e1a",borderLeft:"1px solid rgba(99,179,237,0.18)",display:"flex",flexDirection:"column",zIndex:300,animation:"slideIn 0.3s ease",boxShadow:"-24px 0 64px rgba(0,0,0,0.7)"}}>
+      <div style={{padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+          <span style={{fontFamily:"monospace",fontSize:"18px",fontWeight:"700",color:"#63b3ed"}}>{stock.ticker}</span>
+          <span style={{fontSize:"11px",color:"rgba(255,255,255,0.4)"}}>{liveData?.name||stock.name}</span>
+          {liveLoading
+            ? <span style={{fontSize:"11px",color:"rgba(255,255,255,0.3)"}}>⏳</span>
+            : <><span style={{fontSize:"13px",fontWeight:"700",color:change>=0?"#68d391":"#fc8181",fontFamily:"monospace"}}>{change>=0?"▲":"▼"}{Math.abs(change).toFixed(2)}%</span>
+               {liveData&&<span style={{fontSize:"9px",color:"#68d391",background:"rgba(104,211,145,0.1)",padding:"2px 6px",borderRadius:"4px"}}>🔴 LIVE</span>}</>
+          }
+        </div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",cursor:"pointer",padding:"5px 10px",borderRadius:"7px",fontSize:"14px"}}>✕</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",marginBottom:"12px"}}>
+          {[{label:"תמיכה",val:`$${lvl.support.toFixed(2)}`,color:"#68d391"},{label:"מחיר",val:`$${price.toLocaleString()}`,color:"#f7fafc"},{label:"התנגדות",val:`$${lvl.resistance.toFixed(2)}`,color:"#fc8181"}].map(x=>(
+            <div key={x.label} style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:"9px",padding:"9px",textAlign:"center"}}>
+              <div style={{fontSize:"9px",color:"rgba(255,255,255,0.3)",marginBottom:"3px"}}>{x.label}</div>
+              <div style={{fontSize:"14px",fontWeight:"700",color:x.color,fontFamily:"monospace"}}>{x.val}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:"rgba(0,0,0,0.35)",borderRadius:"10px",padding:"12px",marginBottom:"8px",border:"1px solid rgba(255,255,255,0.05)"}}>
+          <CandleChart candles={candles} currentPrice={price}/>
+        </div>
+        <div style={{background:"rgba(0,0,0,0.35)",borderRadius:"10px",padding:"10px 12px",marginBottom:"12px",border:"1px solid rgba(255,255,255,0.05)"}}>
+          <RSIChart candles={candles}/>
+        </div>
+        <div style={{background:"rgba(99,179,237,0.04)",border:"1px solid rgba(99,179,237,0.15)",borderRadius:"10px",padding:"14px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:"7px"}}>
+              <div style={{width:"6px",height:"6px",borderRadius:"50%",background:"#63b3ed",animation:busy?"pulse 1s infinite":"none"}}/>
+              <span style={{fontSize:"11px",color:"#63b3ed",fontWeight:"600"}}>ניתוח AI {busy&&<span style={{fontSize:"9px",opacity:0.5}}>• כותב...</span>}</span>
+            </div>
+            <button onClick={runAnalysis} disabled={busy} style={{background:"rgba(99,179,237,0.1)",border:"1px solid rgba(99,179,237,0.2)",borderRadius:"6px",color:"#63b3ed",fontSize:"11px",padding:"3px 8px",cursor:busy?"not-allowed":"pointer",opacity:busy?0.5:1}}>{busy?"...":"🔄"}</button>
+          </div>
+          <div style={{fontSize:"13px",lineHeight:"1.9",color:"rgba(255,255,255,0.78)",textAlign:"right",minHeight:"50px",whiteSpace:"pre-wrap"}}>
+            {loading&&!text&&<span style={{color:"rgba(255,255,255,0.25)",fontStyle:"italic"}}>AI מנתח...</span>}
+            {text}
+            {going&&<span style={{display:"inline-block",width:"2px",height:"1em",background:"#63b3ed",marginRight:"2px",verticalAlign:"text-bottom",animation:"blink 0.7s step-end infinite"}}/>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════
+// PORTFOLIO
+// ══════════════════════════════════════════
+const MY_PORTFOLIO = [
+  { ticker:"SMX",  shares:3000,  avgCost:5.10   },
+  { ticker:"PGY",  shares:3000,  avgCost:13.97  },
+  { ticker:"QUBT", shares:4500,  avgCost:11.15  },
+  { ticker:"BYND", shares:7500,  avgCost:1.68   },
+  { ticker:"LUMN", shares:1500,  avgCost:8.06   },
+  { ticker:"MNDY", shares:63,    avgCost:181.03 },
+];
+
+const EMPTY = { ticker:"", shares:"", avgCost:"" };
+
+function PortfolioPanel({ onClose, allStocks }) {
+  const [holdings, setHoldings]   = useState([]);
+  const [newRow, setNewRow]       = useState({...EMPTY});
+  const [storageReady, setStorageReady] = useState(false);
+  const [saved, setSaved]         = useState(false);
+  const [activeTab, setTab]       = useState("holdings");
+  const [ratings, setRatings]     = useState(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const { text: diagText, going: diagGoing, play: diagPlay } = useTypewriter();
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sr_portfolio_v4");
+      setHoldings(saved ? JSON.parse(saved) : MY_PORTFOLIO);
+    } catch { setHoldings(MY_PORTFOLIO); }
+    setStorageReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady || holdings.length === 0) return;
+    try {
+      localStorage.setItem("sr_portfolio_v4", JSON.stringify(holdings));
+      setSaved(true); setTimeout(() => setSaved(false), 1500);
+    } catch {}
+  }, [holdings, storageReady]);
+
+  const enriched = holdings.map(h => {
+    const s = allStocks[h.ticker];
+    const price  = s?.price ?? null;
+    const value  = price ? price * h.shares : null;
+    const cost   = h.avgCost * h.shares;
+    const pnl    = value !== null ? value - cost : null;
+    const pnlPct = cost > 0 && pnl !== null ? (pnl/cost)*100 : null;
+    return { ...h, price, value, cost, pnl, pnlPct, name: s?.name || h.ticker };
+  });
+
+  const totalValue = enriched.reduce((a,h)=>a+(h.value??h.cost),0);
+  const totalCost  = enriched.reduce((a,h)=>a+h.cost,0);
+  const totalPnL   = totalValue - totalCost;
+  const totalPct   = totalCost>0?(totalPnL/totalCost)*100:0;
+
+  const addHolding    = () => {
+    if (!newRow.ticker || !newRow.shares) return;
+    setHoldings(p => [...p, { ticker:newRow.ticker.toUpperCase().trim(), shares:parseFloat(newRow.shares)||0, avgCost:parseFloat(newRow.avgCost)||0 }]);
+    setNewRow({...EMPTY});
+  };
+  const removeHolding = i => setHoldings(p => p.filter((_,j)=>j!==i));
+
+  const runDiagnosis = async () => {
+    setDiagLoading(true); setTab("analysis"); setRatings(null);
+    const lines = enriched.map(h =>
+      `${h.ticker} (${h.name}): ${h.shares.toLocaleString()} מניות, עלות $${h.avgCost}, מחיר ${h.price?`$${h.price.toFixed(2)}`:"?"}, P&L: ${h.pnlPct!==null?h.pnlPct.toFixed(1)+"%":"N/A"}`
+    ).join("\n");
+    try {
+      const jsonTxt = await callClaude(
+        `אתה אנליסט השקעות. נתח את התיק והחזר JSON בלבד, ללא טקסט נוסף:\n${lines}\n\nהחזר:\n[\n  { "ticker": "XXX", "action": "BUY"|"HOLD"|"SELL", "score": 1-10, "reason": "סיבה קצרה בעברית עד 8 מילים" }\n]\nBUY=כדאי להגדיל, HOLD=להחזיק, SELL=למכור. score 10=פוטנציאל גבוה, 1=למכור.`
+      );
+      try { setRatings(JSON.parse(jsonTxt.replace(/```json|```/g,"").trim())); } catch {}
+      const txt = await callClaude(
+        `אבחן תיק בעברית:\n${lines}\n\nסה"כ: $${totalValue.toFixed(0)}, P&L: ${totalPnL>=0?"+":""}${totalPct.toFixed(1)}%\n\n3 פסקאות, ללא כוכביות:\n1. מצב כללי\n2. הפוזיציות הכי מבטיחות\n3. מה למכור ולמה`
+      );
+      diagPlay(txt);
+    } catch { diagPlay("שגיאה."); }
+    setDiagLoading(false);
+  };
+
+  const diagBusy = diagLoading || diagGoing;
+
+  return (
+    <div dir="rtl" style={{position:"fixed",top:0,right:0,height:"100vh",width:"min(660px,100vw)",background:"#080e1a",borderLeft:"1px solid rgba(167,139,250,0.2)",display:"flex",flexDirection:"column",zIndex:300,animation:"slideIn 0.3s ease",boxShadow:"-24px 0 64px rgba(0,0,0,0.7)"}}>
+      <div style={{padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{fontSize:"16px",fontWeight:"700",color:"#a78bfa"}}>💼 תיק ההשקעות</div>
+          <div style={{fontSize:"10px",color:saved?"#68d391":"rgba(255,255,255,0.25)",marginTop:"1px"}}>{saved?"✓ נשמר":"נשמר אוטומטית"}</div>
+        </div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"rgba(255,255,255,0.5)",cursor:"pointer",padding:"5px 10px",borderRadius:"7px",fontSize:"14px"}}>✕</button>
+      </div>
+
+      {holdings.length>0&&(
+        <div style={{padding:"10px 18px",background:"rgba(167,139,250,0.05)",borderBottom:"1px solid rgba(255,255,255,0.05)",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px",flexShrink:0}}>
+          {[{label:"שווי",val:`$${totalValue.toLocaleString("en",{maximumFractionDigits:0})}`,color:"#f7fafc"},{label:"עלות",val:`$${totalCost.toLocaleString("en",{maximumFractionDigits:0})}`,color:"rgba(255,255,255,0.5)"},{label:"P&L",val:`${totalPnL>=0?"+":""}${totalPct.toFixed(1)}%`,color:totalPnL>=0?"#68d391":"#fc8181"}].map(x=>(
+            <div key={x.label} style={{textAlign:"center"}}>
+              <div style={{fontSize:"9px",color:"rgba(255,255,255,0.3)",marginBottom:"2px"}}>{x.label}</div>
+              <div style={{fontFamily:"monospace",fontSize:"14px",fontWeight:"700",color:x.color}}>{x.val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{display:"flex",borderBottom:"1px solid rgba(255,255,255,0.06)",flexShrink:0}}>
+        {[{key:"holdings",label:"פוזיציות"},{key:"analysis",label:"אבחון AI"}].map(t=>(
+          <button key={t.key} onClick={()=>setTab(t.key)} style={{flex:1,padding:"10px",background:"none",border:"none",borderBottom:`2px solid ${activeTab===t.key?"#a78bfa":"transparent"}`,color:activeTab===t.key?"#a78bfa":"rgba(255,255,255,0.35)",fontSize:"13px",cursor:"pointer",fontWeight:activeTab===t.key?"600":"400"}}>{t.label}</button>
+        ))}
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+        {activeTab==="holdings"&&(
+          <>
+            {enriched.map((h,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 0.9fr auto",gap:"5px",alignItems:"center",padding:"9px 10px",background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"9px",marginBottom:"6px"}}>
+                <div><div style={{fontFamily:"monospace",fontSize:"13px",fontWeight:"700",color:"#a78bfa"}}>{h.ticker}</div><div style={{fontSize:"10px",color:"rgba(255,255,255,0.3)"}}>{h.shares.toLocaleString()} מניות</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:"8px",color:"rgba(255,255,255,0.3)",marginBottom:"2px"}}>עלות</div><div style={{fontFamily:"monospace",fontSize:"11px",color:"rgba(255,255,255,0.7)"}}>${h.avgCost}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:"8px",color:"rgba(255,255,255,0.3)",marginBottom:"2px"}}>מחיר</div><div style={{fontFamily:"monospace",fontSize:"11px",color:"#f7fafc"}}>{h.price?`$${h.price.toFixed(2)}`:"—"}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:"8px",color:"rgba(255,255,255,0.3)",marginBottom:"2px"}}>P&L</div><div style={{fontFamily:"monospace",fontSize:"12px",fontWeight:"700",color:h.pnlPct===null?"rgba(255,255,255,0.3)":h.pnlPct>=0?"#68d391":"#fc8181"}}>{h.pnlPct!==null?`${h.pnlPct>=0?"+":""}${h.pnlPct.toFixed(1)}%`:"—"}</div></div>
+                <button onClick={()=>removeHolding(i)} style={{background:"rgba(252,129,129,0.1)",border:"1px solid rgba(252,129,129,0.2)",color:"#fc8181",width:"22px",height:"22px",borderRadius:"6px",cursor:"pointer",fontSize:"11px"}}>✕</button>
+              </div>
+            ))}
+            <div style={{background:"rgba(167,139,250,0.05)",border:"1px solid rgba(167,139,250,0.15)",borderRadius:"10px",padding:"12px",marginTop:"8px",marginBottom:"10px"}}>
+              <div style={{fontSize:"11px",color:"rgba(255,255,255,0.4)",marginBottom:"8px"}}>➕ הוספת מניה</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"7px",marginBottom:"8px"}}>
+                {[{key:"ticker",label:"טיקר",ph:"SMX"},{key:"shares",label:"מניות",ph:"1000"},{key:"avgCost",label:"עלות $",ph:"4.50"}].map(f=>(
+                  <div key={f.key}><div style={{fontSize:"9px",color:"rgba(255,255,255,0.3)",marginBottom:"3px"}}>{f.label}</div>
+                  <input value={newRow[f.key]} onChange={e=>setNewRow(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph} style={{width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"7px",padding:"7px 9px",color:"#f7fafc",fontSize:"13px",fontFamily:"monospace"}}/></div>
+                ))}
+              </div>
+              <button onClick={addHolding} style={{width:"100%",padding:"8px",background:"rgba(167,139,250,0.18)",border:"1px solid rgba(167,139,250,0.35)",borderRadius:"7px",color:"#a78bfa",fontSize:"13px",cursor:"pointer",fontWeight:"600"}}>הוסף לתיק</button>
+            </div>
+            {holdings.length>0&&(
+              <button onClick={runDiagnosis} disabled={diagBusy} style={{width:"100%",padding:"12px",background:"linear-gradient(135deg,rgba(167,139,250,0.25),rgba(99,179,237,0.2))",border:"1px solid rgba(167,139,250,0.4)",borderRadius:"9px",color:"#a78bfa",fontSize:"14px",cursor:diagBusy?"not-allowed":"pointer",fontWeight:"700",opacity:diagBusy?0.6:1}}>
+                {diagBusy?"⏳ מאבחן...":"🔍 אבחון AI לתיק"}
+              </button>
+            )}
+          </>
+        )}
+        {activeTab==="analysis"&&(
+          <>
+            {!diagText&&!diagLoading&&!ratings&&<div style={{textAlign:"center",padding:"20px",color:"rgba(255,255,255,0.25)",fontSize:"13px"}}>חזור ל"פוזיציות" ולחץ אבחון</div>}
+            {diagLoading&&!ratings&&<div style={{color:"rgba(255,255,255,0.25)",fontStyle:"italic",fontSize:"13px",marginBottom:"8px",textAlign:"center"}}>⏳ AI מנתח ומדרג...</div>}
+            {ratings&&(
+              <div style={{marginBottom:"16px"}}>
+                <div style={{fontSize:"12px",color:"rgba(255,255,255,0.4)",marginBottom:"8px",fontWeight:"600"}}>דירוג AI — לפי פוטנציאל</div>
+                {[...ratings].sort((a,b)=>b.score-a.score).map(r=>{
+                  const isBuy=r.action==="BUY",isSell=r.action==="SELL";
+                  const bg=isBuy?"rgba(104,211,145,0.08)":isSell?"rgba(252,129,129,0.08)":"rgba(255,255,255,0.03)";
+                  const border=isBuy?"rgba(104,211,145,0.3)":isSell?"rgba(252,129,129,0.3)":"rgba(255,255,255,0.08)";
+                  const labelBg=isBuy?"rgba(104,211,145,0.2)":isSell?"rgba(252,129,129,0.2)":"rgba(255,255,255,0.08)";
+                  const labelC=isBuy?"#68d391":isSell?"#fc8181":"rgba(255,255,255,0.5)";
+                  const labelT=isBuy?"📈 קנה":isSell?"📉 מכור":"⏸ החזק";
+                  const barC=isBuy?"#68d391":isSell?"#fc8181":"#63b3ed";
+                  return(
+                    <div key={r.ticker} style={{background:bg,border:`1px solid ${border}`,borderRadius:"10px",padding:"10px 12px",marginBottom:"7px"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"6px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                          <span style={{fontFamily:"monospace",fontSize:"14px",fontWeight:"700",color:labelC}}>{r.ticker}</span>
+                          <span style={{fontSize:"10px",padding:"2px 8px",background:labelBg,borderRadius:"20px",color:labelC,fontWeight:"600"}}>{labelT}</span>
+                        </div>
+                        <span style={{fontFamily:"monospace",fontSize:"15px",fontWeight:"700",color:barC}}>{r.score}/10</span>
+                      </div>
+                      <div style={{height:"4px",background:"rgba(255,255,255,0.07)",borderRadius:"4px",marginBottom:"6px",overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${(r.score/10)*100}%`,background:barC,borderRadius:"4px"}}/>
+                      </div>
+                      <div style={{fontSize:"11px",color:"rgba(255,255,255,0.55)",textAlign:"right"}}>{r.reason}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {(diagText||diagGoing)&&(
+              <div style={{background:"rgba(167,139,250,0.04)",border:"1px solid rgba(167,139,250,0.15)",borderRadius:"10px",padding:"14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"7px"}}>
+                    <div style={{width:"6px",height:"6px",borderRadius:"50%",background:"#a78bfa",animation:diagGoing?"pulse 1s infinite":"none"}}/>
+                    <span style={{fontSize:"11px",color:"#a78bfa",fontWeight:"600"}}>ניתוח מפורט {diagGoing&&<span style={{fontSize:"9px",opacity:0.5}}>• כותב...</span>}</span>
+                  </div>
+                  {!diagBusy&&<button onClick={runDiagnosis} style={{background:"rgba(167,139,250,0.1)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:"6px",color:"#a78bfa",fontSize:"11px",padding:"3px 8px",cursor:"pointer"}}>🔄</button>}
+                </div>
+                <div style={{fontSize:"13px",lineHeight:"1.9",color:"rgba(255,255,255,0.78)",textAlign:"right",whiteSpace:"pre-wrap"}}>
+                  {diagText}
+                  {diagGoing&&<span style={{display:"inline-block",width:"2px",height:"1em",background:"#a78bfa",marginRight:"2px",verticalAlign:"text-bottom",animation:"blink 0.7s step-end infinite"}}/>}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════
+// STOCK CARD
+// ══════════════════════════════════════════
+function StockCard({ ticker, name, price, change, sector, index, onChart, accent="#63b3ed", aRgb="99,179,237" }) {
+  const pos = change >= 0;
+  return (
+    <div dir="rtl" style={{background:`rgba(${aRgb},0.03)`,border:`1px solid rgba(${aRgb},0.1)`,borderRadius:"12px",padding:"13px",transition:"all 0.2s",animation:`fadeSlide 0.4s ease ${index*0.04}s both`,cursor:"pointer"}}
+      onMouseEnter={e=>{e.currentTarget.style.background=`rgba(${aRgb},0.08)`;e.currentTarget.style.borderColor=`rgba(${aRgb},0.3)`;e.currentTarget.style.transform="translateY(-2px)";}}
+      onMouseLeave={e=>{e.currentTarget.style.background=`rgba(${aRgb},0.03)`;e.currentTarget.style.borderColor=`rgba(${aRgb},0.1)`;e.currentTarget.style.transform="";}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:"6px",marginBottom:"2px"}}>
+            <span style={{fontFamily:"monospace",fontSize:"14px",fontWeight:"700",color:accent}}>{ticker}</span>
+            {sector&&<span style={{fontSize:"9px",padding:"1px 5px",background:`rgba(${aRgb},0.12)`,borderRadius:"20px",color:"rgba(255,255,255,0.45)"}}>{sector}</span>}
+          </div>
+          <div style={{fontSize:"11px",color:"rgba(255,255,255,0.4)"}}>{name}</div>
+        </div>
+        <div style={{textAlign:"left"}}>
+          <div style={{fontSize:"16px",fontWeight:"700",fontFamily:"monospace",color:"#f7fafc"}}>${price<1?price.toFixed(4):price<10?price.toFixed(3):price.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div style={{fontSize:"11px",fontWeight:"600",color:pos?"#68d391":"#fc8181",fontFamily:"monospace"}}>{pos?"▲":"▼"}{Math.abs(change).toFixed(2)}%</div>
+        </div>
+      </div>
+      <button onClick={()=>onChart({ticker,name,price,change,sector})} style={{width:"100%",padding:"7px",background:`rgba(${aRgb},0.1)`,border:`1px solid rgba(${aRgb},0.22)`,borderRadius:"7px",color:accent,fontSize:"12px",cursor:"pointer"}}
+        onMouseEnter={e=>e.currentTarget.style.background=`rgba(${aRgb},0.2)`}
+        onMouseLeave={e=>e.currentTarget.style.background=`rgba(${aRgb},0.1)`}>
+        📊 ניתוח גרף + AI ←
+      </button>
+    </div>
+  );
+}
+
+function SectionLabel({ label, color, rgb }) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px"}}>
+      <span style={{fontSize:"11px",color,fontWeight:"600",whiteSpace:"nowrap"}}>{label}</span>
+      <div style={{height:"1px",flex:1,background:`rgba(${rgb},0.15)`}}/>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════
+// ALL STOCKS
+// ══════════════════════════════════════════
+const ALL_STOCKS = {
+  SMX:{name:"SMX Security Matters",price:4.35,change:-11.59,sector:"ביטחון",section:"myport"},
+  PGY:{name:"Pagaya Technologies",price:14.32,change:-4.98,sector:"פינטק",section:"myport"},
+  QUBT:{name:"Quantum Computing Inc.",price:9.41,change:-4.27,sector:"קוואנטום",section:"myport"},
+  BYND:{name:"Beyond Meat",price:1.045,change:-9.91,sector:"מזון",section:"myport"},
+  LUMN:{name:"Lumen Technologies",price:8.73,change:0.69,sector:"תקשורת",section:"myport"},
+  MNDY:{name:"monday.com",price:67.86,change:-0.80,sector:"SaaS",section:"myport"},
+  TSLA:{name:"Tesla, Inc.",price:386.42,change:-1.55,sector:"רכב/אנרגיה",section:"compare"},
+  LI:{name:"Li Auto Inc.",price:18.50,change:-1.12,sector:"רכב סיני",section:"compare"},
+  AAPL:{name:"Apple Inc.",price:266.17,change:-2.52,sector:"טכנולוגיה",section:"compare"},
+  GOOG:{name:"Alphabet Inc.",price:330.47,change:-1.47,sector:"טכנולוגיה",section:"compare"},
+  NVDA:{name:"NVIDIA Corporation",price:199.88,change:-1.08,sector:"מוליכים",section:"compare"},
+  AMZN:{name:"Amazon.com",price:249.91,change:0.66,sector:"מסחר/ענן",section:"compare"},
+  MSFT:{name:"Microsoft Corp.",price:424.16,change:1.46,sector:"טכנולוגיה",section:"compare"},
+  META:{name:"Meta Platforms",price:668.84,change:-0.31,sector:"טכנולוגיה",section:"compare"},
+  BX:{name:"Blackstone Inc.",price:128.50,change:-0.38,sector:"פיננסים",section:"compare"},
+  OGEN:{name:"Oragenics, Inc.",price:0.66,change:-6.65,sector:"ביוטק",section:"watch"},
+  NIO:{name:"NIO Inc.",price:6.43,change:-3.45,sector:"רכב סיני",section:"watch"},
+  INTC:{name:"Intel Corporation",price:21.65,change:0.85,sector:"מוליכים",section:"watch"},
+  ALMS:{name:"Alumis Inc.",price:24.98,change:1.09,sector:"ביוטק",section:"watch"},
+  MBLY:{name:"Mobileye Global",price:7.87,change:-2.11,sector:"אוטונומי",section:"watch"},
+  OTLK:{name:"Outlook Therapeutics",price:0.3194,change:-13.68,sector:"ביוטק",section:"watch"},
+  EKSO:{name:"Ekso Bionics",price:11.12,change:-2.28,sector:"רובוטיקה",section:"watch"},
+  ANL:{name:"Adlai Nortye Ltd.",price:15.96,change:-3.86,sector:"ביוטק",section:"watch"},
+  SIDU:{name:"Sidus Space, Inc.",price:3.75,change:-13.59,sector:"חלל",section:"watch"},
+  YCBD:{name:"cbdMD, Inc.",price:0.8443,change:4.49,sector:"קנאביס",section:"watch"},
+  AXIL:{name:"AXIL Brands",price:6.95,change:-0.64,sector:"צריכה",section:"watch"},
+  BDRX:{name:"Biodexa Pharma",price:4.00,change:-7.62,sector:"ביוטק",section:"watch"},
+  CMCT:{name:"Creative Media & Trust",price:6.46,change:0.94,sector:"נדלן",section:"watch"},
+  CETX:{name:"Cemtrex, Inc.",price:1.16,change:-10.08,sector:"טכנולוגיה",section:"watch"},
+  ASTI:{name:"Ascent Solar Tech",price:4.90,change:-0.61,sector:"אנרגיה",section:"watch"},
+  SUNE:{name:"SUNation Energy",price:1.27,change:-2.31,sector:"אנרגיה",section:"watch"},
+  ENVB:{name:"Enveric Biosciences",price:3.37,change:-7.67,sector:"ביוטק",section:"watch"},
+  TRNR:{name:"Interactive Strength",price:1.08,change:-1.82,sector:"כושר",section:"watch"},
+  MLGO:{name:"MicroAlgo Inc.",price:4.00,change:-3.38,sector:"AI",section:"watch"},
+  LCID:{name:"Lucid Group",price:7.11,change:5.33,sector:"רכב חשמלי",section:"watch"},
+  BAESY:{name:"BAE Systems plc",price:116.05,change:-5.07,sector:"ביטחון",section:"watch"},
+  SEDG:{name:"SolarEdge Tech",price:40.57,change:1.88,sector:"אנרגיה",section:"watch"},
+  APP:{name:"AppLovin Corporation",price:473.18,change:-3.62,sector:"טכנולוגיה",section:"watch"},
+  ET:{name:"Energy Transfer LP",price:18.96,change:0.26,sector:"אנרגיה",section:"watch"},
+  PTON:{name:"Peloton Interactive",price:5.00,change:-3.47,sector:"כושר",section:"watch"},
+  SMCI:{name:"Super Micro Computer",price:28.43,change:-1.32,sector:"שרתים",section:"watch"},
+  IVVD:{name:"Invivyd, Inc.",price:1.59,change:-5.36,sector:"ביוטק",section:"watch"},
+  RANI:{name:"Rani Therapeutics",price:0.9478,change:-2.66,sector:"ביוטק",section:"watch"},
+  OPEN:{name:"Opendoor Technologies",price:5.45,change:1.87,sector:"נדלן",section:"watch"},
+  TELO:{name:"Telomir Pharma",price:1.39,change:-6.08,sector:"ביוטק",section:"watch"},
+  HOLO:{name:"MicroCloud Hologram",price:2.16,change:-3.57,sector:"AR/VR",section:"watch"},
+  MBIO:{name:"Mustang Bio",price:0.7161,change:-3.20,sector:"ביוטק",section:"watch"},
+  GRML:{name:"Greenland Mines",price:0.4013,change:-0.20,sector:"כרייה",section:"watch"},
+  TWG:{name:"Top Wealth Group",price:3.49,change:-5.42,sector:"פיננסים",section:"watch"},
+  AUID:{name:"authID Inc.",price:1.27,change:7.63,sector:"אבטחה",section:"watch"},
+  EVTV:{name:"Envirotech Vehicles",price:1.72,change:-2.27,sector:"רכב",section:"watch"},
+  BIRD:{name:"Allbirds, Inc.",price:8.50,change:-22.87,sector:"אופנה",section:"watch"},
+  BGL:{name:"Blue Gold Limited",price:1.06,change:-14.52,sector:"מתכות",section:"watch"},
+  AZI:{name:"Autozi Internet Tech",price:1.51,change:-5.63,sector:"טכנולוגיה",section:"watch"},
+};
+
+// ══════════════════════════════════════════
+// MAIN APP
+// ══════════════════════════════════════════
+function App() {
+  const [activeTab, setActiveTab]   = useState("myport");
+  const [chartStock, setChartStock] = useState(null);
+  const [showPortfolio, setShowPortfolio] = useState(false);
+  const [search, setSearch]         = useState("");
+  const { text: aiText, going: aiGoing, play: aiPlay } = useTypewriter();
+  const [aiLoading, setAiLoading]   = useState(false);
+
+  const fetchSummary = useCallback(async () => {
+    setAiLoading(true);
+    const myStocks = ["SMX","PGY","QUBT","BYND","LUMN","MNDY"].map(t=>`${t}: $${ALL_STOCKS[t].price} (${ALL_STOCKS[t].change.toFixed(2)}%)`).join(", ");
+    try {
+      const txt = await callClaude(`סיכום שוק יומי בעברית, 2 משפטים, עד 40 מילים. התיק: ${myStocks}. היה ישיר ותובנתי.`);
+      aiPlay(txt);
+    } catch { aiPlay("שגיאה בטעינת סיכום."); }
+    setAiLoading(false);
+  }, []);
+
+  useEffect(() => { fetchSummary(); }, []);
+
+  const tabs = [
+    {key:"myport",  label:"📁 התיק שלי"},
+    {key:"compare", label:"📊 השוואה"},
+    {key:"watch",   label:"👁 מעקב"},
+  ];
+
+  const SECTION_CONFIG = {
+    myport:  {label:"📁 המניות שלי",        accent:"#a78bfa",rgb:"167,139,250"},
+    compare: {label:"📊 השוואה — Big Tech", accent:"#63b3ed",rgb:"99,179,237"},
+    watch:   {label:"👁 רשימת מעקב",        accent:"#f6ad55",rgb:"246,173,85"},
+  };
+
+  const displayStocks = Object.entries(ALL_STOCKS).filter(([t,v])=>{
+    if (v.section !== activeTab) return false;
+    if (!search.trim()) return true;
+    return t.includes(search.toUpperCase()) || v.name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const cur = SECTION_CONFIG[activeTab];
+  const aiBusy = aiLoading || aiGoing;
+
+  return (
+    <div dir="rtl" style={{minHeight:"100vh",background:"#060b14",color:"#f7fafc",fontFamily:"Heebo,system-ui,sans-serif",padding:"env(safe-area-inset-top,16px) 14px 40px",paddingTop:"max(env(safe-area-inset-top),16px)"}}>
+      <div style={{maxWidth:"1040px",margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"10px"}}>
+          <h1 style={{fontFamily:"monospace",fontSize:"20px",fontWeight:"700",color:"#f7fafc"}}>STOCK<span style={{color:"#63b3ed"}}>RADAR</span></h1>
+          <button onClick={()=>setShowPortfolio(true)} style={{background:"rgba(167,139,250,0.14)",border:"1px solid rgba(167,139,250,0.3)",borderRadius:"8px",color:"#a78bfa",padding:"7px 14px",cursor:"pointer",fontSize:"13px",fontWeight:"600"}}>💼 תיק</button>
+        </div>
+
+        <div style={{background:"linear-gradient(135deg,rgba(99,179,237,0.07),rgba(99,179,237,0.02))",border:"1px solid rgba(99,179,237,0.17)",borderRadius:"9px",padding:"11px 14px",marginBottom:"12px",minHeight:"44px",display:"flex",alignItems:"center",gap:"9px"}}>
+          <div style={{width:"6px",height:"6px",borderRadius:"50%",background:"#63b3ed",flexShrink:0,animation:aiBusy?"pulse 1s infinite":"none"}}/>
+          <p style={{fontSize:"12px",lineHeight:"1.6",color:"rgba(255,255,255,0.65)",flex:1,textAlign:"right",whiteSpace:"pre-wrap"}}>
+            {aiBusy&&!aiText&&<span style={{color:"rgba(255,255,255,0.25)",fontStyle:"italic"}}>טוען סיכום...</span>}
+            {aiText}
+            {aiGoing&&<span style={{display:"inline-block",width:"2px",height:"1em",background:"#63b3ed",marginRight:"2px",verticalAlign:"text-bottom",animation:"blink 0.7s step-end infinite"}}/>}
+          </p>
+          {!aiBusy&&<button onClick={fetchSummary} style={{background:"none",border:"none",color:"rgba(99,179,237,0.4)",cursor:"pointer",fontSize:"14px"}}>🔄</button>}
+        </div>
+
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="חיפוש מניה..."
+          style={{width:"100%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"8px",padding:"8px 12px",color:"#f7fafc",fontSize:"13px",marginBottom:"12px"}}/>
+
+        <div style={{display:"flex",gap:"6px",marginBottom:"16px",flexWrap:"wrap"}}>
+          {tabs.map(t=>(
+            <button key={t.key} onClick={()=>setActiveTab(t.key)} style={{padding:"7px 14px",borderRadius:"8px",fontSize:"13px",cursor:"pointer",transition:"all 0.15s",background:activeTab===t.key?`rgba(${SECTION_CONFIG[t.key].rgb},0.18)`:"transparent",border:activeTab===t.key?`1px solid rgba(${SECTION_CONFIG[t.key].rgb},0.45)`:"1px solid rgba(255,255,255,0.09)",color:activeTab===t.key?`rgb(${SECTION_CONFIG[t.key].rgb})`:"rgba(255,255,255,0.4)",fontWeight:activeTab===t.key?"600":"400"}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <SectionLabel label={cur.label} color={cur.accent} rgb={cur.rgb}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:"10px"}}>
+          {displayStocks.map(([ticker,s],i)=>(
+            <StockCard key={ticker} ticker={ticker} name={s.name} price={s.price} change={s.change} sector={s.sector} index={i} onChart={setChartStock} accent={cur.accent} aRgb={cur.rgb}/>
+          ))}
+        </div>
+        {displayStocks.length===0&&<div style={{textAlign:"center",padding:"40px",color:"rgba(255,255,255,0.2)",fontSize:"13px"}}>לא נמצאו תוצאות</div>}
+
+        <div style={{textAlign:"center",fontSize:"10px",color:"rgba(255,255,255,0.12)",marginTop:"24px"}}>למטרות מידע בלבד · אין ייעוץ פיננסי</div>
+      </div>
+
+      {chartStock&&<ChartPanel stock={chartStock} onClose={()=>setChartStock(null)}/>}
+      {showPortfolio&&<PortfolioPanel onClose={()=>setShowPortfolio(false)} allStocks={ALL_STOCKS}/>}
+      {(chartStock||showPortfolio)&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:250,animation:"fadeIn 0.22s ease"}} onClick={()=>{setChartStock(null);setShowPortfolio(false);}}/>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+
+<script>
+// Service Worker — PWA offline support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+
+</body>
+</html>
