@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Dani’s Money"/>
+  <meta name="theme-color" content="#060b14"/>
+  <title>Dani’s Money</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;overscroll-behavior:none}
+    body{background:#060b14;font-family:Heebo,system-ui,sans-serif;color:#f7fafc}
+    :root{
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+    }
+    #root{ padding-top: calc(var(--sat) + 16px); }
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-thumb{background:rgba(99,179,237,0.2);border-radius:4px}
+    input:focus{outline:none}
+    @keyframes fadeSlide{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+    @keyframes slideIn{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:translateX(0)}}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  </style>
+</head>
+<body>
+<div style="padding: 10px; background: #1a1a1a; color: white; border-bottom: 1px solid #333; text-align: center; display: flex; justify-content: center; gap: 20px; flex-wrap: wrap;">
+    <div>
+        <label>Anthropic Key:</label>
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-..." style="background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; width: 150px;">
+    </div>
+    <div>
+        <label>Finnhub Key:</label>
+        <input type="password" id="finnhubKeyInput" placeholder="Finnhub Key" style="background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; width: 150px;">
+    </div>
+</div>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const getAnthropicKey = () => document.getElementById('apiKeyInput').value;
+const getFinnhubKey = () => document.getElementById('finnhubKeyInput').value;
+
+const initKeyStorage = () => {
+    const fields = [
+        { id: 'apiKeyInput', storageKey: 'saved_anthropic' },
+        { id: 'finnhubKeyInput', storageKey: 'saved_finnhub' }
+    ];
+    fields.forEach(field => {
+        const input = document.getElementById(field.id);
+        if (!input) return;
+        const savedValue = localStorage.getItem(field.storageKey);
+        if (savedValue) input.value = savedValue;
+        input.addEventListener('input', (e) => localStorage.setItem(field.storageKey, e.target.value));
+    });
+};
+window.addEventListener('DOMContentLoaded', initKeyStorage);
+
+async function callClaude(prompt) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "x-api-key": getAnthropicKey(),
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true"
+        },
+        body: JSON.stringify({
+            model: "claude-3-5-sonnet-20240620",
+            max_tokens: 800,
+            messages: [{ role: "user", content: prompt }],
+        }),
+    });
+    const d = await r.json();
+    return d.content?.[0]?.text || "";
+}
+
+function seededRand(seed) {
+    let s = seed;
+    return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+}
+
+function generateCandles(ticker, basePrice, days = 60) {
+    const hash = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+    const rand = seededRand(hash * 997);
+    const out = []; let price = basePrice * (0.86 + rand() * 0.05);
+    for (let i = 0; i < days; i++) {
+        const vol = 0.013 + rand() * 0.022, open = price;
+        const close = open * (1 + (rand() - 0.465) * vol);
+        out.push({ open, close, high: Math.max(open,close)*(1+rand()*0.008), low: Math.min(open,close)*(1-rand()*0.008) });
+        price = close;
+    }
+    return out;
+}
+
+function calcSMA(c,p){return c.map((_,i)=>i<p-1?null:c.slice(i-p+1,i+1).reduce((a,x)=>a+x.close,0)/p);}
+
+function calcRSI(c,p=14){
+    const g=[],l=[];
+    for(let i=1;i<c.length;i++){
+        const d=c[i].close-c[i-1].close;
+        g.push(d>0?d:0); l.push(d<0?-d:0);
+    }
+    return c.map((_,i)=>{
+        if(i<p) return null;
+        const gv=g.slice(i-p,i).reduce((a,b)=>a+b,0)/p;
+        const lv=l.slice(i-p,i).reduce((a,b)=>a+b,0)/p;
+        return lv===0?100:100-100/(1+gv/lv);
+    });
+}
+
+function findLevels(c){
+    return {
+        resistance: Math.max(...c.slice(-30).map(x=>x.high)),
+        support: Math.min(...c.slice(-30).map(x=>x.low))
+    };
+}
+
+function useTypewriter() {
+    const [text, setText] = useState("");
+    const [going, setGoing] = useState(false);
+    const iv = useRef(null);
+    const play = useCallback((full) => {
+        clearInterval(iv.current);
+        setText(""); setGoing(true);
+        let i = 0;
+        iv.current = setInterval(() => {
+            i += 3;
+            if (i >= full.length) { setText(full); setGoing(false); clearInterval(iv.current); }
+            else setText(full.slice(0, i));
+        }, 18);
+    }, []);
+    useEffect(() => () => clearInterval(iv.current), []);
+    return { text, going, play };
+}
+
+function CandleChart({ candles, currentPrice }) {
+    const svgRef=useRef(null); const[tip,setTip]=useState(null);
+    const W=560,H=200,P={t:10,r:44,b:26,l:50},cw=W-P.l-P.r,ch=H-P.t-P.b;
+    const allP=candles.flatMap(c=>[c.high,c.low]),minP=Math.min(...allP)*0.997,maxP=Math.max(...allP)*1.003,rng=maxP-minP;
+    const toX=i=>P.l+(i/(candles.length-1))*cw,toY=p=>P.t+ch-((p-minP)/rng)*ch;
+    const sma20=calcSMA(candles,20), sma50=calcSMA(candles,50), lvl=findLevels(candles);
+    const bw=Math.max(2,(cw/candles.length)*0.65);
+    const mkPath=sma=>sma.map((v,i)=>v===null?"":`${i===sma.findIndex(x=>x!==null)?"M":"L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+    
+    return (
+        <div>
+            <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible",cursor:"crosshair"}}
+                onMouseMove={e=>{
+                    const r=svgRef.current.getBoundingClientRect();
+                    const mx=(e.clientX-r.left)*(W/r.width);
+                    const idx=Math.round(((mx-P.l)/cw)*(candles.length-1));
+                    if(idx>=0&&idx<candles.length){
+                        const c=candles[idx];
+                        setTip({idx,...c,x:mx,y:toY(c.close)});
+                    }
+                }}
+                onMouseLeave={()=>setTip(null)}>
+                <path d={mkPath(sma20)} fill="none" stroke="#63b3ed" strokeWidth="1.5" opacity="0.85"/>
+                <path d={mkPath(sma50)} fill="none" stroke="#f6ad55" strokeWidth="1.5" opacity="0.85"/>
+                {candles.map((c,i)=>{
+                    const x=toX(i), isUp=c.close>=c.open, color=isUp?"#68d391":"#fc8181";
+                    return(<g key={i}>
+                        <line x1={x} y1={toY(c.high)} x2={x} y2={toY(c.low)} stroke={color} strokeWidth="0.8"/>
+                        <rect x={x-bw/2} y={toY(Math.max(c.open,c.close))} width={bw} height={Math.max(1.5,Math.abs(toY(c.open)-toY(c.close)))} fill={color}/>
+                    </g>);
+                })}
+            </svg>
+        </div>
+    );
+}
+
+function App() {
+    const [activeTab, setActiveTab] = useState("myport");
+    const [chartStock, setChartStock] = useState(null);
+    const [search, setSearch] = useState("");
+    const { text: aiText, going: aiGoing, play: aiPlay } = useTypewriter();
+
+    return (
+        <div dir="rtl" style={{padding: "20px"}}>
+             {/* הכותרת החדשה והמעוצבת */}
+             <h1 style={{textAlign:"center", color:"#63b3ed", fontFamily:"monospace", fontWeight:"700", fontSize:"2.5rem"}}>
+                DANI’S <span style={{color:"#f7fafc"}}>MONEY</span>
+             </h1>
+             <p style={{textAlign:"center", fontSize:"0.9rem", marginTop:"10px"}}>{aiText}</p>
+             <div style={{display:"flex", justifyContent:"center", margin:"20px 0"}}>
+                 <input 
+                    placeholder="חיפוש מניה..." 
+                    onChange={e => setSearch(e.target.value)}
+                    style={{padding:"10px", borderRadius:"8px", border:"1px solid #333", background:"#1a1a1a", color:"white", width:"100%", maxWidth:"400px"}}
+                 />
+             </div>
+             <div style={{textAlign:"center", color:"gray"}}>האפליקציה מוכנה. הזן מפתחות ולחץ על מניה לניתוח.</div>
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
