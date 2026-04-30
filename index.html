@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="StockRadar"/>
+  <meta name="theme-color" content="#060b14"/>
+  <title>StockRadar</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;overscroll-behavior:none}
+    body{background:#060b14;font-family:Heebo,system-ui,sans-serif;color:#f7fafc}
+    :root{
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+      --sal: env(safe-area-inset-left, 0px);
+      --sar: env(safe-area-inset-right, 0px);
+    }
+    #root{ padding-top: calc(var(--sat) + 16px); }
+    ::-webkit-scrollbar{width:3px}
+    ::-webkit-scrollbar-thumb{background:rgba(99,179,237,0.2);border-radius:4px}
+    input:focus{outline:none}
+    input::placeholder{color:rgba(255,255,255,0.25)}
+    @keyframes fadeSlide{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes pulse{0%,100%{opacity:0.4}50%{opacity:1}}
+    @keyframes slideIn{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:translateX(0)}}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// CONFIG
+const ANTHROPIC_KEY = "YOUR_ANTHROPIC_KEY_HERE";
+const FINNHUB_KEY   = "YOUR_FINNHUB_KEY_HERE";
+
+async function fetchLivePrice(ticker) {
+  try {
+    const r = await fetch(
+      `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_KEY}`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (d.c && d.c > 0) return { price: d.c, change: d.dp ?? 0 };
+  } catch {}
+  return null;
+}
+
+async function callClaude(prompt) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_KEY,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: "claude-3-5-sonnet-20240620",
+      max_tokens: 800,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  const d = await r.json();
+  return d.content?.[0]?.text || "";
+}
+
+function useTypewriter() {
+  const [text, setText] = useState("");
+  const [going, setGoing] = useState(false);
+  const iv = useRef(null);
+  const play = useCallback((full) => {
+    clearInterval(iv.current);
+    setText(""); setGoing(true);
+    let i = 0;
+    iv.current = setInterval(() => {
+      i += 3;
+      if (i >= full.length) { setText(full); setGoing(false); clearInterval(iv.current); }
+      else setText(full.slice(0, i));
+    }, 18);
+  }, []);
+  useEffect(() => () => clearInterval(iv.current), []);
+  return { text, going, play };
+}
+
+function seededRand(seed) {
+  let s = seed;
+  return () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+}
+function generateCandles(ticker, basePrice, days = 60) {
+  const hash = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rand = seededRand(hash * 997);
+  const out = []; let price = basePrice * (0.86 + rand() * 0.05);
+  for (let i = 0; i < days; i++) {
+    const vol = 0.013 + rand() * 0.022, open = price;
+    const close = open * (1 + (rand() - 0.465) * vol);
+    out.push({ open, close, high: Math.max(open,close)*(1+rand()*0.008), low: Math.min(open,close)*(1-rand()*0.008) });
+    price = close;
+  }
+  return out;
+}
+function calcSMA(c,p){return c.map((_,i)=>i<p-1?null:c.slice(i-p+1,i+1).reduce((a,x)=>a+x.close,0)/p);}
+function calcRSI(c,p=14){
+  const g=[],l=[];
+  for(let i=1;i<c.length;i++){const d=c[i].close-c[i-1].close;g.push(d>0?d:0);l.push(d<0?-d:0);}
+  return c.map((_,i)=>{if(i<p)return null;const gv=g.slice(i-p,i).reduce((a,b)=>a+b,0)/p,lv=l.slice(i-p,i).reduce((a,b)=>a+b,0)/p;return lv===0?100:100-100/(1+gv/lv);});
+}
+function findLevels(c){return{resistance:Math.max(...c.slice(-30).map(x=>x.high)),support:Math.min(...c.slice(-30).map(x=>x.low))};}
+
+function CandleChart({ candles, currentPrice }) {
+  const svgRef=useRef(null);const[tip,setTip]=useState(null);
+  const W=560,H=200,P={t:10,r:44,b:26,l:50},cw=W-P.l-P.r,ch=H-P.t-P.b;
+  const allP=candles.flatMap(c=>[c.high,c.low]),minP=Math.min(...allP)*0.997,maxP=Math.max(...allP)*1.003,rng=maxP-minP;
+  const toX=i=>P.l+(i/(candles.length-1))*cw,toY=p=>P.t+ch-((p-minP)/rng)*ch;
+  const sma20=calcSMA(candles,20),sma50=calcSMA(candles,50),lvl=findLevels(candles);
+  const bw=Math.max(2,(cw/candles.length)*0.65);
+  const mkPath=sma=>sma.map((v,i)=>v===null?"":`${i===sma.findIndex(x=>x!==null)?"M":"L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const gridPs=Array.from({length:5},(_,i)=>minP+(rng*i)/4);
+  const months=["ינו","פבר","מרץ","אפר","מאי","יונ","יול","אוג","ספט","אוק","נוב","דצ"];
+  const now=new Date(),xLbls=[0,15,30,45,59].map(i=>{const d=new Date(now);d.setDate(d.getDate()-(59-i));return{i,label:`${d.getDate()} ${months[d.getMonth()]}`};});
+  const lc=candles[candles.length-1].close,breakout=lc>lvl.resistance*0.999,breakdown=lc<lvl.support*1.001;
+  return(
+    <div>
+      <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"6px",alignItems:"center"}}>
+        {[{color:"#63b3ed",label:"SMA20"},{color:"#f6ad55",label:"SMA50"},{color:"rgba(252,129,129,0.8)",label:"התנגדות",dash:true},{color:"rgba(104,211,145,0.8)",label:"תמיכה",dash:true}].map(l=>(
+          <div key={l.label} style={{display:"flex",alignItems:"center",gap:"3px"}}>
+            <svg width="12" height="8"><line x1="0" y1="4" x2="12" y2="4" stroke={l.color} strokeWidth="1.5" strokeDasharray={l.dash?"4,3":"none"}/></svg>
+            <span style={{fontSize:"10px",color:"rgba(255,255,255,0.4)"}}>{l.label}</span>
+          </div>
+        ))}
+        {(breakout||breakdown)&&<span style={{fontSize:"10px",fontWeight:"700",color:breakout?"#68d391":"#fc8181",background:breakout?"rgba(104,211,145,0.1)":"rgba(252,129,129,0.1)",padding:"2px 7px",borderRadius:"6px"}}>{breakout?"⚡ פריצה!":"⚠️ שבירה!"}</span>}
+      </div>
+      <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible",cursor:"crosshair"}}
+        onMouseMove={e=>{const r=svgRef.current.getBoundingClientRect();const mx=(e.clientX-r.left)*(W/r.width);const idx=Math.round(((mx-P.l)/cw)*(candles.length-1));if(idx>=0&&idx<candles.length){const c=candles[idx];setTip({idx,...c,x:mx,y:toY(c.close)});}}}
+        onMouseLeave={()=>setTip(null)}>
+        {gridPs.map((p,i)=><g key={i}><line x1={P.l} y1={toY(p)} x2={W-P.r} y2={toY(p)} stroke="rgba(255,255,255,0.04)" strokeWidth="1"/><text x={P.l-4} y={toY(p)+4} textAnchor="end" fontSize="9" fill="rgba(255,255,255,0.25)" fontFamily="monospace">{p>=1000?`${(p/1000).toFixed(1)}K`:p.toFixed(2)}</text></g>)}
+        {xLbls.map(({i,label})=><text key={i} x={toX(i)} y={H-4} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,0.25)">{label}</text>)}
+        <line x1={P.l} y1={toY(lvl.resistance)} x2={W-P.r} y2={toY(lvl.resistance)} stroke="rgba(252,129,129,0.6)" strokeWidth="1" strokeDasharray="5,4"/>
+        <line x1={P.l} y1={toY(lvl.support)} x2={W-P.r} y2={toY(lvl.support)} stroke="rgba(104,211,145,0.6)" strokeWidth="1" strokeDasharray="5,4"/>
+        {candles.map((c,i)=>{const x=toX(i),isUp=c.close>=c.open,color=isUp?"#68d391":"#fc8181";return(<g key={i}><line x1={x} y1={toY(c.high)} x2={x} y2={toY(c.low)} stroke={color} strokeWidth="0.8" opacity="0.8"/><rect x={x-bw/2} y={toY(Math.max(c.open,c.close))} width={bw} height={Math.max(1.5,Math.abs(toY(c.open)-toY(c.close)))} fill={color} opacity={tip&&tip.idx===i?1:0.82}/></g>);})}
+        <path d={mkPath(sma20)} fill="none" stroke="#63b3ed" strokeWidth="1.5" opacity="0.85"/>
+        <path d={mkPath(sma50)} fill="none" stroke="#f6ad55" strokeWidth="1.5" opacity="0.85"/>
+        {tip&&(<g>
+          <line x1={toX(tip.idx)} y1={P.t} x2={toX(tip.idx)} y2={H-P.b} stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="3,3"/>
+          <circle cx={toX(tip.idx)} cy={toY(tip.close)} r="3" fill="#63b3ed"/>
+        </g>)}
+      </svg>
+    </div>
+  );
+}
+
+function RSIChart({ candles }) {
+  const W=560,H=52,P={t:4,r:44,b:16,l:50},cw=W-P.l-P.r,ch=H-P.t-P.b;
+  const rsis=calcRSI(candles),toX=i=>P.l+(i/(candles.length-1))*cw,toY=v=>P.t+ch-(v/100)*ch;
+  const path=rsis.map((v,i)=>v===null?"":`${i===rsis.findIndex(x=>x!==null)?"M":"L"}${toX(i).toFixed(1)},${toY(v).toFixed(1)}`).join(" ");
+  const last=rsis.filter(Boolean).pop()||50,col=last>70?"#fc8181":last<30?"#68d391":"#63b3ed";
+  return(
+    <div style={{marginTop:"4px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:"3px"}}>
+        <span style={{fontSize:"10px",color:"rgba(255,255,255,0.3)"}}>RSI (14)</span>
+        <span style={{fontSize:"11px",fontWeight:"700",color:col,fontFamily:"monospace"}}>{last.toFixed(1)} {last>70?"— קנוי יתר":last<30?"— מכור יתר":"— נייטרל"}</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {[70,50,30].map(v=><g key={v}><line x1={P.l} y1={toY(v)} x2={W-P.r} y2={toY(v)} stroke={v===50?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.12)"} strokeWidth="1"/><text x={P.l-4} y={toY(v)+3} textAnchor="end" fontSize="8" fill="rgba(255,255,255,0.2)" fontFamily="monospace">{v}</text></g>)}
+        <path d={path} fill="none" stroke={col} strokeWidth="1.5" opacity="0.9"/>
+      </svg>
+    </div>
+  );
+}
+
+function ChartPanel({ stock, onClose }) {
+  const { text, going, play } = useTypewriter();
+  const [loading, setLoading] = useState(false);
+  const [live, setLive] = useState(null);
+  const [liveLoading, setLiveLoading] = useState(true);
+
+  useEffect(() => {
+    fetchLivePrice(stock.ticker).then(d => { setLive(d); setLiveLoading(false); });
+  }, [stock.ticker]);
+
+  const price = live?.price ?? stock.price;
+  const change = live?.change ?? stock.change;
+  const candles = generateCandles(stock.ticker, price);
+  const lvl = findLevels(candles);
+  const sma20 = calcSMA(candles,20), sma50 = calcSMA(candles,50);
+  const lastRsi = calcRSI(candles).filter(Boolean).pop()||50;
+
+  const runAnalysis = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await callClaude(`נתח ${stock.ticker} בעברית:\nמחיר: $${price.toFixed(2)}, שינוי: ${change.toFixed(2)}%\nתמיכה: $${lvl.support.toFixed(2)}, התנגדות: $${lvl.resistance.toFixed(2)}\nSMA20: $${sma20[sma20.length-1]?.toFixed(2)}, RSI: ${lastRsi.toFixed(1)}\n3 פסקאות, ללא כוכביות: מצב מחיר, אינדיקטורים, תרחיש מסחר`);
+      play(r);
+    } catch { play("שגיאה בתקשורת."); }
+    setLoading(false);
+  }, [stock.ticker, price]);
+
+  useEffect(() => { if (!liveLoading) runAnalysis(); }, [liveLoading]);
+  const busy = loading || going;
+
+  return (
+    <div dir="rtl" style={{position:"fixed",top:0,right:0,height:"100vh",width:"min(660px,100vw)",background:"#080e1a",borderLeft:"1px solid rgba(99,179,237,0.18)",display:"flex",flexDirection:"column",zIndex:300,animation:"slideIn 0.3s ease",boxShadow:"-24px 0 64px rgba(0,0,0,0.7)"}}>
+      <div style={{padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"8px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+          <span style={{fontFamily:"monospace",fontSize:"18px",fontWeight:"700",color:"#63b3ed"}}>{stock.ticker}</span>
+          {!liveLoading && <span style={{fontSize:"13px",fontWeight:"700",color:change>=0?"#68d391":"#fc8181"}}>{change>=0?"▲":"▼"}{Math.abs(change).toFixed(2)}%</span>}
+        </div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.7)",padding:"6px 14px",borderRadius:"8px",cursor:"pointer"}}>✕ סגור</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+        <div style={{background:"rgba(0,0,0,0.35)",borderRadius:"10px",padding:"12px",marginBottom:"8px",border:"1px solid rgba(255,255,255,0.05)"}}>
+          <CandleChart candles={candles} currentPrice={price}/>
+        </div>
+        <div style={{background:"rgba(99,179,237,0.04)",border:"1px solid rgba(99,179,237,0.15)",borderRadius:"10px",padding:"14px"}}>
+          <p style={{fontSize:"13px",lineHeight:"1.9",color:"rgba(255,255,255,0.78)"}}>{text || (loading && "AI מנתח...")}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PortfolioPanel({ onClose, allStocks }) {
+  const [lots, setLots] = useState([]);
+  const [activeTab, setTab] = useState("holdings");
+
+  useEffect(() => {
+    const s = localStorage.getItem("sr_lots_v5");
+    if(s) setLots(JSON.parse(s));
+  }, []);
+
+  return (
+    <div dir="rtl" style={{position:"fixed",top:0,right:0,height:"100vh",width:"min(680px,100vw)",background:"#080e1a",zIndex:300,padding:"20px"}}>
+      <h2 style={{color:"#a78bfa"}}>💼 תיק השקעות</h2>
+      <button onClick={onClose} style={{marginTop:"20px",padding:"10px",borderRadius:"8px",cursor:"pointer"}}>חזור</button>
+    </div>
+  );
+}
+
+function StockCard({ ticker, name, price, change, sector, index, onChart, accent="#63b3ed", aRgb="99,179,237" }) {
+  const pos = change >= 0;
+  return (
+    <div dir="rtl" style={{background:`rgba(${aRgb},0.03)`,border:`1px solid rgba(${aRgb},0.1)`,borderRadius:"12px",padding:"13px",cursor:"pointer"}}
+      onClick={()=>onChart({ticker,name,price,change,sector})}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:"10px"}}>
+        <div>
+          <div style={{fontWeight:"700",color:accent}}>{ticker}</div>
+          <div style={{fontSize:"11px",color:"rgba(255,255,255,0.4)"}}>{name}</div>
+        </div>
+        <div style={{textAlign:"left"}}>
+          <div style={{fontSize:"16px",fontWeight:"700"}}>${price.toFixed(2)}</div>
+          <div style={{fontSize:"11px",color:pos?"#68d391":"#fc8181"}}>{pos?"▲":"▼"}{Math.abs(change).toFixed(2)}%</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ALL_STOCKS = {
+  SMX:{name:"SMX Security Matters",price:4.35,change:-11.59,sector:"ביטחון",section:"myport"},
+  PGY:{name:"Pagaya Technologies",price:14.32,change:-4.98,sector:"פינטק",section:"myport"},
+  AAPL:{name:"Apple Inc.",price:266.17,change:-2.52,sector:"טכנולוגיה",section:"compare"},
+  GOOG:{name:"Alphabet Inc.",price:330.47,change:-1.47,sector:"טכנולוגיה",section:"compare"}
+};
+
+function App() {
+  const [activeTab, setActiveTab] = useState("myport");
+  const [chartStock, setChartStock] = useState(null);
+  const [showPortfolio, setShowPortfolio] = useState(false);
+
+  return (
+    <div dir="rtl" style={{minHeight:"100vh",background:"#060b14",color:"#f7fafc",padding:"20px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
+        <h1 style={{fontSize:"20px"}}>STOCK<span style={{color:"#63b3ed"}}>RADAR</span></h1>
+        <button onClick={()=>setShowPortfolio(true)} style={{padding:"8px 16px",borderRadius:"8px",background:"rgba(167,139,250,0.2)",color:"#a78bfa",border:"1px solid #a78bfa",cursor:"pointer"}}>💼 תיק</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:"15px"}}>
+        {Object.entries(ALL_STOCKS).map(([ticker, s], i) => (
+          <StockCard key={ticker} ticker={ticker} name={s.name} price={s.price} change={s.change} sector={s.sector} index={i} onChart={setChartStock} />
+        ))}
+      </div>
+      {chartStock && <ChartPanel stock={chartStock} onClose={()=>setChartStock(null)}/>}
+      {showPortfolio && <PortfolioPanel onClose={()=>setShowPortfolio(false)} allStocks={ALL_STOCKS}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
