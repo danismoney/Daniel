@@ -1,0 +1,671 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+
+const fmtP = p => p == null ? "—" : p < 1 ? p.toFixed(4) : p < 10 ? p.toFixed(3) : p.toFixed(2);
+
+// —— AI ——
+async function askClaude(prompt) {
+  const r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 600, messages: [{ role: "user", content: prompt }] })
+  });
+  const d = await r.json();
+  return d.content?.[0]?.text || "";
+}
+
+// —— live price ——
+async function fetchLive(ticker) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
+    const r = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+    const j = await r.json();
+    const meta = JSON.parse(j.contents)?.chart?.result?.[0]?.meta;
+    if (meta?.regularMarketPrice > 0) {
+      const price = meta.regularMarketPrice, prev = meta.chartPreviousClose || price;
+      return { price, change: ((price - prev) / prev) * 100 };
+    }
+  } catch { }
+  return null;
+}
+
+// —— typewriter ——
+function useTW() {
+  const [text, setText] = useState(""); const [going, setGoing] = useState(false);
+  const iv = useRef(null);
+  const play = useCallback(full => {
+    clearInterval(iv.current); setText(""); setGoing(true); let i = 0;
+    iv.current = setInterval(() => { i += 3; if (i >= full.length) { setText(full); setGoing(false); clearInterval(iv.current); } else setText(full.slice(0, i)); }, 16);
+  }, []);
+  useEffect(() => () => clearInterval(iv.current), []);
+  return { text, going, play };
+}
+
+// —— Candles ——
+function mkCandles(ticker, base) {
+  let s = ticker.split("").reduce((a, c) => a + c.charCodeAt(0), 0) * 997;
+  const rnd = () => { s = (s * 1664525 + 1013904223) & 0xffffffff; return (s >>> 0) / 0xffffffff; };
+  const out = []; let p = base * (0.86 + rnd() * 0.05);
+  for (let i = 0; i < 60; i++) { const o = p, c = o * (1 + (rnd() - 0.465) * (0.013 + rnd() * 0.022)); out.push({ o, c, h: Math.max(o, c) * (1 + rnd() * 0.008), l: Math.min(o, c) * (1 - rnd() * 0.008) }); p = c; }
+  return out;
+}
+function calcSMA(c, n) { return c.map((_, i) => i < n - 1 ? null : c.slice(i - n + 1, i + 1).reduce((a, x) => a + x.c, 0) / n); }
+function calcRSI(c) { const g = [], l = []; for (let i = 1; i < c.length; i++) { const d = c[i].c - c[i - 1].c; g.push(d > 0 ? d : 0); l.push(d < 0 ? -d : 0); } return c.map((_, i) => { if (i < 14) return null; const gv = g.slice(i - 14, i).reduce((a, b) => a + b, 0) / 14, lv = l.slice(i - 14, i).reduce((a, b) => a + b, 0) / 14; return lv === 0 ? 100 : 100 - 100 / (1 + gv / lv); }); }
+function getLevels(c) { return { res: Math.max(...c.slice(-30).map(x => x.h)), sup: Math.min(...c.slice(-30).map(x => x.l)) }; }
+
+// —— Chart ——
+function Chart({ candles, price }) {
+  const ref = useRef(); const [tip, setTip] = useState(null);
+  const W = 560, H = 180, P = { t: 8, r: 40, b: 22, l: 46 }, cw = W - P.l - P.r, ch = H - P.t - P.b;
+  const all = candles.flatMap(c => [c.h, c.l]);
+  const mn = Math.min(...all) * .997, mx = Math.max(...all) * 1.003, rng = mx - mn;
+  const tx = i => P.l + (i / (candles.length - 1)) * cw, ty = p => P.t + ch - ((p - mn) / rng) * ch;
+  const s20 = calcSMA(candles, 20), s50 = calcSMA(candles, 50), lv = getLevels(candles);
+  const bw = Math.max(2, (cw / candles.length) * .65);
+  const path = arr => arr.map((v, i) => v == null ? "" : `${i === arr.findIndex(x => x != null) ? "M" : "L"}${tx(i).toFixed(1)},${ty(v).toFixed(1)}`).join(" ");
+  const gps = [0, 1, 2, 3, 4].map(i => mn + (rng * i) / 4);
+  const mo = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יונ", "יול", "אוג", "ספט", "אוק", "נוב", "דצמ"];
+  const now = new Date(), xl = [0, 20, 40, 59].map(i => { const d = new Date(now); d.setDate(d.getDate() - (59 - i)); return { i, l: `${d.getDate()} ${mo[d.getMonth()]}` }; });
+  return (
+    <svg ref={ref} width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible", cursor: "crosshair" }}
+      onMouseMove={e => { const r = ref.current.getBoundingClientRect(); const mx = (e.clientX - r.left) * (W / r.width); const idx = Math.round(((mx - P.l) / cw) * (candles.length - 1)); if (idx >= 0 && idx < candles.length) { const c = candles[idx]; setTip({ idx, ...c, y: ty(c.c) }); } }}
+      onMouseLeave={() => setTip(null)}>
+      {gps.map((p, i) => <g key={i}><line x1={P.l} y1={ty(p)} x2={W - P.r} y2={ty(p)} stroke="rgba(255,255,255,.04)" /><text x={P.l - 3} y={ty(p) + 4} textAnchor="end" fontSize="9" fill="rgba(255,255,255,.22)" fontFamily="monospace">{fmtP(p)}</text></g>)}
+      {xl.map(({ i, l }) => <text key={i} x={tx(i)} y={H - 3} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,.22)">{l}</text>)}
+      <line x1={P.l} y1={ty(lv.res)} x2={W - P.r} y2={ty(lv.res)} stroke="rgba(252,129,129,.5)" strokeWidth="1" strokeDasharray="5,4" />
+      <text x={W - P.r + 2} y={ty(lv.res) + 4} fontSize="8" fill="rgba(252,129,129,.6)" fontFamily="monospace">{fmtP(lv.res)}</text>
+      <line x1={P.l} y1={ty(lv.sup)} x2={W - P.r} y2={ty(lv.sup)} stroke="rgba(104,211,145,.5)" strokeWidth="1" strokeDasharray="5,4" />
+      <text x={W - P.r + 2} y={ty(lv.sup) + 4} fontSize="8" fill="rgba(104,211,145,.6)" fontFamily="monospace">{fmtP(lv.sup)}</text>
+      {candles.map((c, i) => { const x = tx(i), up = c.c >= c.o, col = up ? "#68d391" : "#fc8181"; return (<g key={i}><line x1={x} y1={ty(c.h)} x2={x} y2={ty(c.l)} stroke={col} strokeWidth=".8" opacity=".8" /><rect x={x - bw / 2} y={ty(Math.max(c.o, c.c))} width={bw} height={Math.max(1.5, Math.abs(ty(c.o) - ty(c.c)))} fill={col} opacity={tip?.idx === i ? 1 : .82} /></g>); })}
+      <path d={path(s20)} fill="none" stroke="#63b3ed" strokeWidth="1.5" opacity=".85" />
+      <path d={path(s50)} fill="none" stroke="#f6ad55" strokeWidth="1.5" opacity=".85" />
+      <line x1={P.l} y1={ty(price)} x2={W - P.r} y2={ty(price)} stroke="rgba(255,255,255,.2)" strokeWidth="1" strokeDasharray="3,3" />
+      {tip && <g>
+        <line x1={tx(tip.idx)} y1={P.t} x2={tx(tip.idx)} y2={H - P.b} stroke="rgba(255,255,255,.1)" strokeWidth="1" strokeDasharray="3,3" />
+        <circle cx={tx(tip.idx)} cy={ty(tip.c)} r="3" fill="#63b3ed" />
+        <rect x={Math.min(tx(tip.idx) + 5, W - 90)} y={tip.y - 36} width="86" height="46" rx="5" fill="rgba(8,14,26,.96)" stroke="rgba(99,179,237,.25)" />
+        <text x={Math.min(tx(tip.idx) + 9, W - 86)} y={tip.y - 22} fontSize="9" fill="rgba(255,255,255,.5)" fontFamily="monospace">פתיחה {fmtP(tip.o)}</text>
+        <text x={Math.min(tx(tip.idx) + 9, W - 86)} y={tip.y - 11} fontSize="9" fill="rgba(255,255,255,.5)" fontFamily="monospace">סגירה {fmtP(tip.c)}</text>
+        <text x={Math.min(tx(tip.idx) + 9, W - 86)} y={tip.y - 1} fontSize="9" fill={tip.c >= tip.o ? "#68d391" : "#fc8181"} fontFamily="monospace">{tip.c >= tip.o ? "▲" : "▼"}{Math.abs((tip.c - tip.o) / tip.o * 100).toFixed(2)}%</text>
+      </g>}
+    </svg>
+  );
+}
+
+function RSI({ candles }) {
+  const W = 560, H = 44, P = { t: 3, r: 40, b: 12, l: 46 }, cw = W - P.l - P.r, ch = H - P.t - P.b;
+  const rs = calcRSI(candles), tx = i => P.l + (i / (candles.length - 1)) * cw, ty = v => P.t + ch - (v / 100) * ch;
+  const path = rs.map((v, i) => v == null ? "" : `${i === rs.findIndex(x => x != null) ? "M" : "L"}${tx(i).toFixed(1)},${ty(v).toFixed(1)}`).join(" ");
+  const last = rs.filter(Boolean).pop() || 50, col = last > 70 ? "#fc8181" : last < 30 ? "#68d391" : "#63b3ed";
+  return (
+    <div style={{ marginTop: "4px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+        <span style={{ fontSize: "10px", color: "rgba(255,255,255,.3)" }}>RSI (14)</span>
+        <span style={{ fontSize: "11px", fontWeight: "700", color: col, fontFamily: "monospace" }}>{last.toFixed(1)} {last > 70 ? "קנוי יתר" : last < 30 ? "מכור יתר" : "נייטרלי"}</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`}>
+        {[70, 50, 30].map(v => <g key={v}><line x1={P.l} y1={ty(v)} x2={W - P.r} y2={ty(v)} stroke={v === 50 ? "rgba(255,255,255,.05)" : v === 70 ? "rgba(252,129,129,.2)" : "rgba(104,211,145,.2)"} strokeWidth="1" strokeDasharray={v !== 50 ? "4,3" : "none"} /><text x={P.l - 3} y={ty(v) + 3} textAnchor="end" fontSize="8" fill="rgba(255,255,255,.2)" fontFamily="monospace">{v}</text></g>)}
+        <path d={path} fill="none" stroke={col} strokeWidth="1.5" opacity=".9" />
+      </svg>
+    </div>
+  );
+}
+
+// —— Panel ——
+function Panel({ onClose, border, children }) {
+  return <>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 250 }} onClick={onClose} />
+    <div dir="rtl" style={{ position: "fixed", top: 0, right: 0, height: "100dvh", width: "min(680px,100vw)", background: "#080e1a", borderLeft: `1px solid ${border}`, display: "flex", flexDirection: "column", zIndex: 300, animation: "slideIn .3s ease", boxShadow: "-20px 0 60px rgba(0,0,0,.7)", paddingTop: "max(env(safe-area-inset-top,0px),44px)" }}>
+      {children}
+    </div>
+  </>;
+}
+
+// —— Chart Panel ——
+function ChartPanel({ stock, onClose, liveMap }) {
+  const { text, going, play } = useTW(); const [ld, setLd] = useState(false);
+  const live = liveMap[stock.ticker];
+  const price = live?.price ?? stock.price, change = live?.change ?? stock.change;
+  const candles = mkCandles(stock.ticker, price), lv = getLevels(candles);
+  const s20 = calcSMA(candles, 20), lastRsi = calcRSI(candles).filter(Boolean).pop() || 50;
+
+  const run = useCallback(async () => {
+    setLd(true);
+    try { play(await askClaude(`נתח ${stock.ticker} (${stock.name}) בעברית:\nמחיר: $${fmtP(price)}, שינוי: ${change.toFixed(2)}%\nתמיכה: $${fmtP(lv.sup)}, התנגדות: $${fmtP(lv.res)}, RSI: ${lastRsi.toFixed(1)}\n3 פסקאות ללא כוכביות: מצב מחיר, אינדיקטורים, תרחיש מסחר`)); }
+    catch (e) { play("שגיאה: " + e.message); }
+    setLd(false);
+  }, [stock.ticker, price]);
+
+  useEffect(() => { run(); }, [run]);
+  const busy = ld || going;
+
+  return (
+    <Panel onClose={onClose} border="rgba(99,179,237,.2)">
+      <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,.06)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontFamily: "monospace", fontSize: "17px", fontWeight: "700", color: "#63b3ed" }}>{stock.ticker}</span>
+          <span style={{ fontSize: "11px", color: "rgba(255,255,255,.4)" }}>{stock.name}</span>
+          <span style={{ fontSize: "12px", fontWeight: "700", color: change >= 0 ? "#68d391" : "#fc8181", fontFamily: "monospace" }}>{change >= 0 ? "▲" : "▼"}{Math.abs(change).toFixed(2)}%</span>
+          {live && <span style={{ fontSize: "8px", color: "#68d391", background: "rgba(104,211,145,.1)", padding: "1px 5px", borderRadius: "4px" }}>●LIVE</span>}
+        </div>
+        <button onClick={onClose} style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.18)", color: "#f7fafc", cursor: "pointer", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>✕ סגור</button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "7px", marginBottom: "10px" }}>
+          {[{ l: "תמיכה", v: "$" + fmtP(lv.sup), c: "#68d391" }, { l: "מחיר", v: "$" + fmtP(price), c: "#f7fafc" }, { l: "התנגדות", v: "$" + fmtP(lv.res), c: "#fc8181" }].map(x => (
+            <div key={x.l} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "9px", padding: "8px", textAlign: "center" }}>
+              <div style={{ fontSize: "9px", color: "rgba(255,255,255,.3)", marginBottom: "2px" }}>{x.l}</div>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: x.c, fontFamily: "monospace" }}>{x.v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ background: "rgba(0,0,0,.3)", borderRadius: "10px", padding: "10px", marginBottom: "6px", border: "1px solid rgba(255,255,255,.05)" }}>
+          <Chart candles={candles} price={price} />
+        </div>
+        <div style={{ background: "rgba(0,0,0,.3)", borderRadius: "10px", padding: "9px 10px", marginBottom: "10px", border: "1px solid rgba(255,255,255,.05)" }}>
+          <RSI candles={candles} />
+        </div>
+        <div style={{ background: "rgba(99,179,237,.04)", border: "1px solid rgba(99,179,237,.15)", borderRadius: "10px", padding: "12px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#63b3ed", animation: busy ? "pulse 1s infinite" : "none" }} />
+              <span style={{ fontSize: "11px", color: "#63b3ed", fontWeight: "600" }}>ניתוח AI {busy && <span style={{ fontSize: "9px", opacity: .5 }}>• כותב...</span>}</span>
+            </div>
+            <button onClick={run} disabled={busy} style={{ background: "rgba(99,179,237,.1)", border: "1px solid rgba(99,179,237,.2)", borderRadius: "6px", color: "#63b3ed", fontSize: "11px", padding: "3px 8px", cursor: busy ? "not-allowed" : "pointer", opacity: busy ? .5 : 1 }}>{busy ? "..." : "🔄"}</button>
+          </div>
+          <div style={{ fontSize: "13px", lineHeight: "1.9", color: "rgba(255,255,255,.78)", textAlign: "right", minHeight: "40px", whiteSpace: "pre-wrap" }}>
+            {ld && !text && <span style={{ color: "rgba(255,255,255,.2)", fontStyle: "italic" }}>AI מנתח...</span>}
+            {text}{going && <span style={{ display: "inline-block", width: "2px", height: "1em", background: "#63b3ed", marginRight: "2px", verticalAlign: "text-bottom", animation: "blink .7s step-end infinite" }} />}
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+// —— Portfolio ——
+const DEF = [
+  { id: 1, ticker: "SMX", shares: 3000, buy: 5.10, sell: 3.90, done: true, date: "2024-01-15" },
+  { id: 2, ticker: "SMX", shares: 3000, buy: 1.67, sell: null, done: false, date: "2024-06-20" },
+  { id: 3, ticker: "PGY", shares: 3000, buy: 13.97, sell: null, done: false, date: "2024-03-10" },
+  { id: 4, ticker: "QUBT", shares: 4500, buy: 11.15, sell: null, done: false, date: "2024-04-05" },
+  { id: 5, ticker: "BYND", shares: 7500, buy: 1.68, sell: null, done: false, date: "2024-02-28" },
+  { id: 6, ticker: "LUMN", shares: 1500, buy: 8.06, sell: null, done: false, date: "2024-05-12" },
+  { id: 7, ticker: "MNDY", shares: 63, buy: 181.03, sell: null, done: false, date: "2023-11-20" },
+];
+
+function Portfolio({ onClose, liveMap, allStocks }) {
+  const [lots, setLots] = useState([]);
+  const [rdy, setRdy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState("active");
+  const [nl, setNl] = useState({ ticker: "", shares: "", buy: "", sell: "", done: false, date: "" });
+  const [sm, setSm] = useState({});
+  const [ratings, setRatings] = useState(null);
+  const [dld, setDld] = useState(false);
+  const { text: dt, going: dg, play: dp } = useTW();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await window.storage?.get("dm_lots_v4");
+        setLots(r?.value ? JSON.parse(r.value) : DEF);
+      } catch { setLots(DEF); }
+      setRdy(true);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!rdy) return;
+    (async () => {
+      try {
+        await window.storage?.set("dm_lots_v4", JSON.stringify(lots));
+        setSaved(true); setTimeout(() => setSaved(false), 1400);
+      } catch { }
+    })();
+  }, [lots, rdy]);
+
+  const lp = t => liveMap[t?.toUpperCase()]?.price ?? allStocks[t?.toUpperCase()]?.price ?? null;
+  const soldSet = new Set(lots.filter(l => l.done).map(l => l.ticker.toUpperCase()));
+  const enrich = lot => {
+    if (lot.done) { const pnl = (lot.sell - lot.buy) * lot.shares; return { ...lot, pnl, pnlPct: ((lot.sell - lot.buy) / lot.buy) * 100 }; }
+    const price = lp(lot.ticker), cost = lot.buy * lot.shares, value = price ? price * lot.shares : null, pnl = value != null ? value - cost : null;
+    return { ...lot, price, cost, value, pnl, pnlPct: cost > 0 && pnl != null ? (pnl / cost) * 100 : null, isRepeat: soldSet.has(lot.ticker.toUpperCase()) };
+  };
+  const active = lots.filter(l => !l.done).map(enrich);
+  const done = lots.filter(l => l.done).map(enrich);
+  const tV = active.reduce((a, h) => a + (h.value ?? h.cost), 0);
+  const tC = active.reduce((a, h) => a + h.cost, 0);
+  const tP = tV - tC, tPct = tC > 0 ? (tP / tC) * 100 : 0;
+  const tR = done.reduce((a, h) => a + h.pnl, 0);
+
+  const add = () => {
+    if (!nl.ticker || !nl.shares || !nl.buy) return;
+    const id = Math.max(0, ...lots.map(l => l.id)) + 1;
+    setLots(p => [...p, { id, ticker: nl.ticker.toUpperCase().trim(), shares: +nl.shares, buy: +nl.buy, sell: nl.done && nl.sell ? +nl.sell : null, done: nl.done, date: nl.date || new Date().toISOString().slice(0, 10) }]);
+    setNl({ ticker: "", shares: "", buy: "", sell: "", done: false, date: "" });
+  };
+  const rm = id => setLots(p => p.filter(l => l.id !== id));
+  const markSold = (id, sp) => { if (!sp) return; setLots(p => p.map(l => l.id === id ? { ...l, done: true, sell: +sp } : l)); setSm(p => ({ ...p, [id]: "" })); };
+
+  const diagnose = async () => {
+    setDld(true); setTab("ai"); setRatings(null);
+    const lines = active.map(h => `${h.ticker}: ${h.shares.toLocaleString()} מניות, עלות $${fmtP(h.buy)}, מחיר ${h.price ? "$" + fmtP(h.price) : "?"}, P&L: ${h.pnlPct != null ? h.pnlPct.toFixed(1) + "%" : "N/A"}${h.isRepeat ? " [חוזר]" : ""}`).join("\n");
+    try {
+      const jraw = await askClaude(`אנליסט, JSON בלבד:\n${lines}\n[{"ticker":"X","action":"BUY|HOLD|SELL","score":1-10,"reason":"עד 8 מילים עברית"}]`);
+      try { setRatings(JSON.parse(jraw.replace(/```json|```/g, "").trim())); } catch { }
+      dp(await askClaude(`אבחן תיק עברית:\n${lines}\nP&L: ${tP >= 0 ? "+" : ""}${tPct.toFixed(1)}%, ממומש: $${tR.toFixed(0)}\n3 פסקאות: מצב, מבטיחות, מה למכור`));
+    } catch (e) { dp("שגיאה: " + e.message); }
+    setDld(false);
+  };
+  const db = dld || dg;
+  const inp = { width: "100%", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)", borderRadius: "7px", padding: "7px 9px", color: "#f7fafc", fontSize: "13px", fontFamily: "monospace", outline: "none" };
+
+  return (
+    <Panel onClose={onClose} border="rgba(167,139,250,.2)">
+      <div style={{ padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,.06)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+        <div>
+          <div style={{ fontSize: "15px", fontWeight: "700", color: "#a78bfa" }}>💼 תיק ההשקעות</div>
+          <div style={{ fontSize: "10px", color: saved ? "#68d391" : "rgba(255,255,255,.25)", marginTop: "1px" }}>{saved ? "✓ נשמר" : "נשמר אוטומטית"}</div>
+        </div>
+        <button onClick={onClose} style={{ background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.18)", color: "#f7fafc", cursor: "pointer", padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "600" }}>✕ סגור</button>
+      </div>
+      <div style={{ padding: "9px 18px", background: "rgba(167,139,250,.05)", borderBottom: "1px solid rgba(255,255,255,.05)", display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "5px", flexShrink: 0 }}>
+        {[{ l: "שווי", v: "$" + tV.toLocaleString("en", { maximumFractionDigits: 0 }), c: "#f7fafc" }, { l: "עלות", v: "$" + tC.toLocaleString("en", { maximumFractionDigits: 0 }), c: "rgba(255,255,255,.45)" }, { l: "P&L", v: (tP >= 0 ? "+" : "") + tPct.toFixed(1) + "%", c: tP >= 0 ? "#68d391" : "#fc8181" }, { l: "ממומש", v: (tR >= 0 ? "+" : "") + "$" + Math.abs(tR).toFixed(0), c: tR >= 0 ? "#68d391" : "#fc8181" }].map(x => (
+          <div key={x.l} style={{ textAlign: "center" }}><div style={{ fontSize: "8px", color: "rgba(255,255,255,.28)", marginBottom: "2px" }}>{x.l}</div><div style={{ fontFamily: "monospace", fontSize: "11px", fontWeight: "700", color: x.c }}>{x.v}</div></div>
+        ))}
+      </div>
+      <div style={{ display: "flex", borderBottom: "1px solid rgba(255,255,255,.06)", flexShrink: 0 }}>
+        {[{ k: "active", l: "📈 פעיל" }, { k: "done", l: "📉 נמכר" }, { k: "add", l: "➕ הוספה" }, { k: "ai", l: "🤖 אבחון" }].map(t => (
+          <button key={t.k} onClick={() => setTab(t.k)} style={{ flex: 1, padding: "9px 2px", background: "none", border: "none", borderBottom: `2px solid ${tab === t.k ? "#a78bfa" : "transparent"}`, color: tab === t.k ? "#a78bfa" : "rgba(255,255,255,.35)", fontSize: "11px", cursor: "pointer", fontWeight: tab === t.k ? "700" : "400" }}>{t.l}</button>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }}>
+        {tab === "active" && <>
+          {active.length === 0 && <div style={{ textAlign: "center", padding: "30px", color: "rgba(255,255,255,.2)", fontSize: "13px" }}>אין פוזיציות פעילות</div>}
+          {active.map(h => (
+            <div key={h.id} style={{ background: "rgba(255,255,255,.02)", border: `1px solid ${h.isRepeat ? "rgba(251,191,36,.25)" : "rgba(255,255,255,.07)"}`, borderRadius: "10px", padding: "10px 12px", marginBottom: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "700", color: "#a78bfa" }}>{h.ticker}</span>
+                    {h.isRepeat && <span style={{ fontSize: "9px", background: "rgba(251,191,36,.15)", color: "#fbbf24", padding: "1px 6px", borderRadius: "20px" }}>🔄 קנייה חוזרת</span>}
+                  </div>
+                  <div style={{ fontSize: "10px", color: "rgba(255,255,255,.3)", marginTop: "2px" }}>{h.shares.toLocaleString()} מניות · עלות ${fmtP(h.buy)} · {h.date}</div>
+                </div>
+                <button onClick={() => rm(h.id)} style={{ background: "rgba(252,129,129,.1)", border: "1px solid rgba(252,129,129,.2)", color: "#fc8181", width: "24px", height: "24px", borderRadius: "6px", cursor: "pointer", fontSize: "11px", flexShrink: 0 }}>✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px", marginBottom: "8px" }}>
+                {[{ l: "עלות", v: "$" + (h.cost || 0).toLocaleString("en", { maximumFractionDigits: 0 }) }, { l: "מחיר", v: h.price ? "$" + fmtP(h.price) : "—" }, { l: "P&L", v: h.pnlPct != null ? (h.pnlPct >= 0 ? "+" : "") + h.pnlPct.toFixed(1) + "%" : "—", c: h.pnlPct == null ? "rgba(255,255,255,.3)" : h.pnlPct >= 0 ? "#68d391" : "#fc8181" }].map((x, i) => (
+                  <div key={i} style={{ background: "rgba(0,0,0,.2)", borderRadius: "7px", padding: "6px", textAlign: "center" }}>
+                    <div style={{ fontSize: "8px", color: "rgba(255,255,255,.3)", marginBottom: "2px" }}>{x.l}</div>
+                    <div style={{ fontFamily: "monospace", fontSize: "11px", fontWeight: x.c ? "700" : "400", color: x.c || "rgba(255,255,255,.7)" }}>{x.v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: "6px" }}>
+                <input value={sm[h.id] || ""} onChange={e => setSm(p => ({ ...p, [h.id]: e.target.value }))} placeholder="מחיר מכירה $"
+                  style={{ flex: 1, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", borderRadius: "7px", padding: "6px 9px", color: "#f7fafc", fontSize: "12px", fontFamily: "monospace", outline: "none" }} />
+                <button onClick={() => markSold(h.id, sm[h.id])} style={{ background: "rgba(252,129,129,.15)", border: "1px solid rgba(252,129,129,.3)", borderRadius: "7px", color: "#fc8181", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontWeight: "600", whiteSpace: "nowrap" }}>רשום מכירה</button>
+              </div>
+            </div>
+          ))}
+          {active.length > 0 && <button onClick={diagnose} disabled={db} style={{ width: "100%", padding: "11px", background: "linear-gradient(135deg,rgba(167,139,250,.22),rgba(99,179,237,.18))", border: "1px solid rgba(167,139,250,.4)", borderRadius: "9px", color: "#a78bfa", fontSize: "14px", cursor: db ? "not-allowed" : "pointer", fontWeight: "700", opacity: db ? .6 : 1, marginTop: "4px" }}>{db ? "⌛ מאבחן..." : "🔍 אבחון AI לתיק"}</button>}
+        </>}
+        {tab === "done" && <>
+          {done.length === 0 && <div style={{ textAlign: "center", padding: "30px", color: "rgba(255,255,255,.2)", fontSize: "13px" }}>אין עסקאות סגורות</div>}
+          {done.map(h => (
+            <div key={h.id} style={{ background: "rgba(255,255,255,.02)", border: "1px solid rgba(255,255,255,.06)", borderRadius: "10px", padding: "10px 12px", marginBottom: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <div><span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "700", color: "rgba(255,255,255,.45)" }}>{h.ticker}</span><span style={{ fontSize: "10px", color: "rgba(255,255,255,.25)", marginRight: "8px" }}> · {h.shares.toLocaleString()} · {h.date}</span></div>
+                <button onClick={() => rm(h.id)} style={{ background: "none", border: "none", color: "rgba(255,255,255,.2)", cursor: "pointer", fontSize: "12px" }}>✕</button>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "6px" }}>
+                {[{ l: "קנייה", v: "$" + fmtP(h.buy) }, { l: "מכירה", v: "$" + fmtP(h.sell) }, { l: "רווח/הפסד", v: (h.pnl >= 0 ? "+" : "") + "$" + h.pnl.toFixed(0), s: (h.pnlPct >= 0 ? "+" : "") + h.pnlPct.toFixed(1) + "%", c: h.pnl >= 0 ? "#68d391" : "#fc8181" }].map((x, i) => (
+                  <div key={i} style={{ background: x.c ? `rgba(${x.c === "#68d391" ? "104,211,145" : "252,129,129"},.08)` : "rgba(0,0,0,.2)", border: x.c ? `1px solid rgba(${x.c === "#68d391" ? "104,211,145" : "252,129,129"},.2)` : "none", borderRadius: "7px", padding: "6px", textAlign: "center" }}>
+                    <div style={{ fontSize: "8px", color: "rgba(255,255,255,.3)", marginBottom: "2px" }}>{x.l}</div>
+                    <div style={{ fontFamily: "monospace", fontSize: "12px", fontWeight: "700", color: x.c || "rgba(255,255,255,.6)" }}>{x.v}</div>
+                    {x.s && <div style={{ fontFamily: "monospace", fontSize: "10px", color: x.c }}>{x.s}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </>}
+        {tab === "add" && (
+          <div style={{ background: "rgba(167,139,250,.05)", border: "1px solid rgba(167,139,250,.15)", borderRadius: "10px", padding: "14px" }}>
+            <div style={{ fontSize: "13px", color: "rgba(255,255,255,.5)", marginBottom: "12px", fontWeight: "600" }}>הוספת עסקה</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "10px" }}>
+              {[{ k: "ticker", l: "טיקר", p: "SMX" }, { k: "shares", l: "מניות", p: "3000" }, { k: "buy", l: "מחיר קנייה $", p: "1.67" }, { k: "date", l: "תאריך", p: "2024-06-20" }].map(f => (
+                <div key={f.k}><div style={{ fontSize: "9px", color: "rgba(255,255,255,.3)", marginBottom: "3px" }}>{f.l}</div><input value={nl[f.k]} onChange={e => setNl(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.p} style={inp} /></div>
+              ))}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", padding: "8px 10px", background: "rgba(255,255,255,.03)", borderRadius: "8px" }}>
+              <input type="checkbox" id="chk" checked={nl.done} onChange={e => setNl(p => ({ ...p, done: e.target.checked }))} style={{ width: "16px", height: "16px", cursor: "pointer" }} />
+              <label htmlFor="chk" style={{ fontSize: "13px", color: "rgba(255,255,255,.6)", cursor: "pointer" }}>מניה זו כבר נמכרה</label>
+            </div>
+            {nl.done && <div style={{ marginBottom: "10px" }}><div style={{ fontSize: "9px", color: "rgba(255,255,255,.3)", marginBottom: "3px" }}>מחיר מכירה $</div><input value={nl.sell} onChange={e => setNl(p => ({ ...p, sell: e.target.value }))} placeholder="3.90" style={{ ...inp, border: "1px solid rgba(252,129,129,.25)" }} /></div>}
+            <button onClick={add} style={{ width: "100%", padding: "10px", background: "rgba(167,139,250,.2)", border: "1px solid rgba(167,139,250,.4)", borderRadius: "8px", color: "#a78bfa", fontSize: "14px", cursor: "pointer", fontWeight: "700" }}>הוסף עסקה</button>
+          </div>
+        )}
+        {tab === "ai" && <>
+          {!dt && !dld && !ratings && <div style={{ textAlign: "center", padding: "24px", color: "rgba(255,255,255,.2)", fontSize: "13px" }}>לחץ "אבחון AI" בלשונית פעיל</div>}
+          {dld && !ratings && <div style={{ textAlign: "center", padding: "20px", color: "rgba(255,255,255,.22)", fontStyle: "italic" }}>⌛ מאבחן...</div>}
+          {ratings && <div style={{ marginBottom: "14px" }}>
+            <div style={{ fontSize: "12px", color: "rgba(255,255,255,.35)", marginBottom: "8px", fontWeight: "600" }}>דירוג AI</div>
+            {[...ratings].sort((a, b) => b.score - a.score).map(r => {
+              const buy = r.action === "BUY", sell = r.action === "SELL";
+              const c = buy ? "#68d391" : sell ? "#fc8181" : "rgba(255,255,255,.45)";
+              const rgb = buy ? "104,211,145" : sell ? "252,129,129" : "200,200,200";
+              return (
+                <div key={r.ticker} style={{ background: `rgba(${rgb},.06)`, border: `1px solid rgba(${rgb},.22)`, borderRadius: "10px", padding: "10px 12px", marginBottom: "7px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "5px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "700", color: c }}>{r.ticker}</span>
+                      <span style={{ fontSize: "10px", padding: "2px 8px", background: `rgba(${rgb},.18)`, borderRadius: "20px", color: c, fontWeight: "600" }}>{buy ? "📈 קנה" : sell ? "📉 מכור" : "⌛ החזק"}</span>
+                    </div>
+                    <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "700", color: c }}>{r.score}/10</span>
+                  </div>
+                  <div style={{ height: "4px", background: "rgba(255,255,255,.07)", borderRadius: "4px", marginBottom: "5px", overflow: "hidden" }}><div style={{ height: "100%", width: `${(r.score / 10) * 100}%`, background: c, borderRadius: "4px" }} /></div>
+                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,.5)", textAlign: "right" }}>{r.reason}</div>
+                </div>
+              );
+            })}
+          </div>}
+          {(dt || dg) && <div style={{ background: "rgba(167,139,250,.04)", border: "1px solid rgba(167,139,250,.15)", borderRadius: "10px", padding: "14px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#a78bfa", animation: dg ? "pulse 1s infinite" : "none" }} />
+                <span style={{ fontSize: "11px", color: "#a78bfa", fontWeight: "600" }}>ניתוח {dg && <span style={{ fontSize: "9px", opacity: .5 }}>• כותב...</span>}</span>
+              </div>
+              {!db && <button onClick={diagnose} style={{ background: "rgba(167,139,250,.1)", border: "1px solid rgba(167,139,250,.2)", borderRadius: "6px", color: "#a78bfa", fontSize: "11px", padding: "3px 8px", cursor: "pointer" }}>🔄</button>}
+            </div>
+            <div style={{ fontSize: "13px", lineHeight: "1.9", color: "rgba(255,255,255,.78)", textAlign: "right", whiteSpace: "pre-wrap" }}>
+              {dt}{dg && <span style={{ display: "inline-block", width: "2px", height: "1em", background: "#a78bfa", marginRight: "2px", verticalAlign: "text-bottom", animation: "blink .7s step-end infinite" }} />}
+            </div>
+          </div>}
+        </>}
+      </div>
+    </Panel>
+  );
+}
+
+// —— Stock Card ——
+function Card({ s, i, accent, aRgb, onChart }) {
+  const pos = s.change >= 0;
+  return (
+    <div dir="rtl" style={{ background: `rgba(${aRgb},.03)`, border: `1px solid rgba(${aRgb},.1)`, borderRadius: "12px", padding: "13px", transition: "all .2s", animation: `fadeSlide .4s ease ${i * .04}s both`, cursor: "pointer" }}
+      onMouseEnter={e => { e.currentTarget.style.background = `rgba(${aRgb},.08)`; e.currentTarget.style.transform = "translateY(-2px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = `rgba(${aRgb},.03)`; e.currentTarget.style.transform = ""; }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+            <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "700", color: accent }}>{s.ticker}</span>
+            {s.sector && <span style={{ fontSize: "9px", padding: "1px 5px", background: `rgba(${aRgb},.12)`, borderRadius: "20px", color: "rgba(255,255,255,.4)" }}>{s.sector}</span>}
+            {s.isLive && <span style={{ fontSize: "8px", color: "#68d391", background: "rgba(104,211,145,.1)", padding: "1px 4px", borderRadius: "3px" }}>●LIVE</span>}
+          </div>
+          <div style={{ fontSize: "11px", color: "rgba(255,255,255,.4)" }}>{s.name}</div>
+        </div>
+        <div style={{ textAlign: "left" }}>
+          <div style={{ fontSize: "16px", fontWeight: "700", fontFamily: "monospace", color: "#f7fafc" }}>${fmtP(s.price)}</div>
+          <div style={{ fontSize: "12px", fontWeight: "700", color: pos ? "#68d391" : "#fc8181", fontFamily: "monospace" }}>{pos ? "▲" : "▼"}{Math.abs(s.change).toFixed(2)}%</div>
+        </div>
+      </div>
+      <button onClick={() => onChart(s)} style={{ width: "100%", padding: "7px", background: `rgba(${aRgb},.1)`, border: `1px solid rgba(${aRgb},.22)`, borderRadius: "7px", color: accent, fontSize: "12px", cursor: "pointer" }}
+        onMouseEnter={e => e.currentTarget.style.background = `rgba(${aRgb},.22)`}
+        onMouseLeave={e => e.currentTarget.style.background = `rgba(${aRgb},.1)`}>
+        📊 ניתוח גרף + AI ←
+      </button>
+    </div>
+  );
+}
+
+// —— Watch Section — 3 categories ——
+function WatchSection({ stocks, onChart }) {
+  const groups = [
+    { key: "buy", label: "💚 שווה לקנות", color: "#68d391", rgb: "104,211,145", filter: s => s.watchScore >= 7 },
+    { key: "mid", label: "🟠 ממותן / המתן", color: "#f6ad55", rgb: "246,173,85", filter: s => s.watchScore >= 4 && s.watchScore < 7 },
+    { key: "weak", label: "🔴 התרחק", color: "#fc8181", rgb: "252,129,129", filter: s => s.watchScore < 4 },
+  ];
+  return (
+    <div>
+      {groups.map(g => {
+        const list = stocks.filter(g.filter).sort((a, b) => b.watchScore - a.watchScore);
+        if (!list.length) return null;
+        return (
+          <div key={g.key} style={{ marginBottom: "22px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+              <span style={{ fontSize: "12px", color: g.color, fontWeight: "700", whiteSpace: "nowrap" }}>{g.label}</span>
+              <div style={{ height: "1px", flex: 1, background: `rgba(${g.rgb},.2)` }} />
+              <span style={{ fontSize: "10px", color: `rgba(${g.rgb},.7)`, background: `rgba(${g.rgb},.1)`, padding: "1px 8px", borderRadius: "20px" }}>{list.length}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: "10px" }}>
+              {list.map((s, i) => (
+                <div key={s.ticker} dir="rtl" style={{ background: `rgba(${g.rgb},.05)`, border: `1px solid rgba(${g.rgb},.2)`, borderRadius: "12px", padding: "13px", transition: "all .2s", animation: `fadeSlide .4s ease ${i * .04}s both`, cursor: "pointer" }}
+                  onMouseEnter={e => { e.currentTarget.style.background = `rgba(${g.rgb},.1)`; e.currentTarget.style.transform = "translateY(-2px)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = `rgba(${g.rgb},.05)`; e.currentTarget.style.transform = ""; }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "7px" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                        <span style={{ fontFamily: "monospace", fontSize: "14px", fontWeight: "700", color: g.color }}>{s.ticker}</span>
+                        <span style={{ fontSize: "9px", padding: "1px 5px", background: `rgba(${g.rgb},.15)`, borderRadius: "20px", color: "rgba(255,255,255,.5)" }}>{s.sector}</span>
+                        {s.isLive && <span style={{ fontSize: "8px", color: "#68d391", background: "rgba(104,211,145,.1)", padding: "1px 4px", borderRadius: "3px" }}>●LIVE</span>}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "rgba(255,255,255,.4)", marginBottom: "5px" }}>{s.name}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <div style={{ height: "4px", width: "55px", background: "rgba(255,255,255,.07)", borderRadius: "4px", overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${(s.watchScore / 10) * 100}%`, background: g.color, borderRadius: "4px" }} />
+                        </div>
+                        <span style={{ fontSize: "10px", color: g.color, fontWeight: "700" }}>{s.watchScore}/10</span>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "left" }}>
+                      <div style={{ fontSize: "15px", fontWeight: "700", fontFamily: "monospace", color: "#f7fafc" }}>${fmtP(s.price)}</div>
+                      <div style={{ fontSize: "11px", fontWeight: "700", color: s.change >= 0 ? "#68d391" : "#fc8181", fontFamily: "monospace" }}>{s.change >= 0 ? "▲" : "▼"}{Math.abs(s.change).toFixed(2)}%</div>
+                    </div>
+                  </div>
+                  {s.watchNote && <div style={{ fontSize: "11px", color: `rgba(${g.rgb},.85)`, background: `rgba(${g.rgb},.07)`, padding: "5px 8px", borderRadius: "6px", marginBottom: "8px", textAlign: "right" }}>💡 {s.watchNote}</div>}
+                  <button onClick={() => onChart(s)} style={{ width: "100%", padding: "7px", background: `rgba(${g.rgb},.1)`, border: `1px solid rgba(${g.rgb},.25)`, borderRadius: "7px", color: g.color, fontSize: "12px", cursor: "pointer" }}
+                    onMouseEnter={e => e.currentTarget.style.background = `rgba(${g.rgb},.22)`}
+                    onMouseLeave={e => e.currentTarget.style.background = `rgba(${g.rgb},.1)`}>
+                    📊 ניתוח גרף + AI ←
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// —— ALL STOCKS ——
+const ALL_STOCKS = {
+  SMX: { name: "SMX Security Matters", price: 4.35, change: -11.59, sector: "ביטחון", section: "myport" },
+  PGY: { name: "Pagaya Technologies", price: 14.32, change: -4.98, sector: "פינטק", section: "myport" },
+  QUBT: { name: "Quantum Computing", price: 9.41, change: -4.27, sector: "קוונטום", section: "myport" },
+  BYND: { name: "Beyond Meat", price: 1.045, change: -9.91, sector: "מזון", section: "myport" },
+  LUMN: { name: "Lumen Technologies", price: 8.73, change: 0.69, sector: "תקשורת", section: "myport" },
+  MNDY: { name: "monday.com", price: 67.86, change: -0.80, sector: "SaaS", section: "myport" },
+  TSLA: { name: "Tesla Inc.", price: 386.42, change: -1.55, sector: "רכב", section: "compare" },
+  LI: { name: "Li Auto Inc.", price: 18.50, change: -1.12, sector: "רכב סיני", section: "compare" },
+  AAPL: { name: "Apple Inc.", price: 266.17, change: -2.52, sector: "טכנולוגיה", section: "compare" },
+  GOOG: { name: "Alphabet Inc.", price: 330.47, change: -1.47, sector: "טכנולוגיה", section: "compare" },
+  NVDA: { name: "NVIDIA Corporation", price: 199.88, change: -1.08, sector: "מוליכים", section: "compare" },
+  AMZN: { name: "Amazon.com", price: 249.91, change: 0.66, sector: "ענן/מסחר", section: "compare" },
+  MSFT: { name: "Microsoft Corp.", price: 424.16, change: 1.46, sector: "טכנולוגיה", section: "compare" },
+  META: { name: "Meta Platforms", price: 668.84, change: -0.31, sector: "טכנולוגיה", section: "compare" },
+  BX: { name: "Blackstone Inc.", price: 128.50, change: -0.38, sector: "פיננסיים", section: "compare" },
+  APP: { name: "AppLovin", price: 473.18, change: -3.62, sector: "טכנולוגיה", section: "watch", watchScore: 8, watchNote: "צמיחה חזקה בפרסום דיגיטלי" },
+  SEDG: { name: "SolarEdge Tech", price: 40.57, change: 1.88, sector: "אנרגיה", section: "watch", watchScore: 8, watchNote: "פוטנציאל חזרה גבוה בסולאר" },
+  AUID: { name: "authID Inc.", price: 1.27, change: 7.63, sector: "אבטחה", section: "watch", watchScore: 7, watchNote: "ביקוש גבוה לאבטחת AI" },
+  LCID: { name: "Lucid Group", price: 7.11, change: 5.33, sector: "EV", section: "watch", watchScore: 7, watchNote: "מומנטום עולה, שוק EV" },
+  ET: { name: "Energy Transfer LP", price: 18.96, change: 0.26, sector: "אנרגיה", section: "watch", watchScore: 7, watchNote: "דיבידנד גבוה ויציב" },
+  OPEN: { name: "Opendoor Technologies", price: 5.45, change: 1.87, sector: "נדלן", section: "watch", watchScore: 7, watchNote: "שוק נדלן מתאושש" },
+  SMCI: { name: "Super Micro Computer", price: 28.43, change: -1.32, sector: "שרתים", section: "watch", watchScore: 5, watchNote: "תלוי דוחות קרובים" },
+  NIO: { name: "NIO Inc.", price: 6.43, change: -3.45, sector: "רכב סיני", section: "watch", watchScore: 5, watchNote: "תלוי מדיניות סינית" },
+  INTC: { name: "Intel Corporation", price: 21.65, change: 0.85, sector: "מוליכים", section: "watch", watchScore: 5, watchNote: "מבנה מחדש בתהליך" },
+  MBLY: { name: "Mobileye Global", price: 7.87, change: -2.11, sector: "אוטונומי", section: "watch", watchScore: 5, watchNote: "לחץ תחרותי מטסלה" },
+  EKSO: { name: "Ekso Bionics", price: 11.12, change: -2.28, sector: "רובוטיקה", section: "watch", watchScore: 5, watchNote: "שוק נישה מתפתח" },
+  PTON: { name: "Peloton Interactive", price: 5.00, change: -3.47, sector: "כושר", section: "watch", watchScore: 4, watchNote: "מאבק בחזרה לצמיחה" },
+  ANL: { name: "Adlai Nortye Ltd.", price: 15.96, change: -3.86, sector: "ביוטק", section: "watch", watchScore: 5, watchNote: "ממתין לתוצאות קליניות" },
+  OTLK: { name: "Outlook Therapeutics", price: 0.3194, change: -13.68, sector: "ביוטק", section: "watch", watchScore: 2, watchNote: "ירידה חדה, סיכון גבוה" },
+  BIRD: { name: "Allbirds", price: 8.50, change: -22.87, sector: "אופנה", section: "watch", watchScore: 1, watchNote: "פשיטת רגל אפשרית" },
+  ENVB: { name: "Enveric Biosciences", price: 3.37, change: -7.67, sector: "ביוטק", section: "watch", watchScore: 2, watchNote: "הון עצמי שלילי" },
+  OGEN: { name: "Oragenics", price: 0.66, change: -6.65, sector: "ביוטק", section: "watch", watchScore: 1, watchNote: "מניית פרוטה, סיכון גבוה" },
+  BAESY: { name: "BAE Systems", price: 116.05, change: -5.07, sector: "ביטחון", section: "watch", watchScore: 3, watchNote: "ירידה בתקציבי ביטחון" },
+  CETX: { name: "Cemtrex", price: 1.16, change: -10.08, sector: "טכנולוגיה", section: "watch", watchScore: 1, watchNote: "נפח נמוך, מניית זבל" },
+};
+
+const CFG = {
+  myport: { label: "📁 שלי", accent: "#a78bfa", rgb: "167,139,250" },
+  compare: { label: "📊 השוואה", accent: "#63b3ed", rgb: "99,179,237" },
+  watch: { label: "👁 מעקב", accent: "#f6ad55", rgb: "246,173,85" },
+  rockets: { label: "🚀 טסות", accent: "#68d391", rgb: "104,211,145" },
+};
+
+// —— MAIN ——
+export default function App() {
+  const [tab, setTab] = useState("myport");
+  const [chart, setChart] = useState(null);
+  const [port, setPort] = useState(false);
+  const [search, setSearch] = useState("");
+  const [liveMap, setLiveMap] = useState({});
+  const [ld, setLd] = useState(false);
+  const [cd, setCd] = useState(60);
+  const [lr, setLr] = useState(null);
+  const { text: ai, going: ag, play: ap } = useTW();
+  const [al, setAl] = useState(false);
+
+  const getS = useCallback(t => {
+    const b = ALL_STOCKS[t], lv = liveMap[t];
+    return {
+      ticker: t, name: b.name, sector: b.sector, section: b.section, watchScore: b.watchScore, watchNote: b.watchNote,
+      price: lv?.price ?? b.price, change: lv?.change ?? b.change, isLive: !!lv
+    };
+  }, [liveMap]);
+
+  const refresh = useCallback(async () => {
+    setLd(true);
+    const res = await Promise.allSettled(Object.keys(ALL_STOCKS).map(t => fetchLive(t).then(v => ({ t, v }))));
+    const map = {};
+    res.forEach(r => { if (r.status === "fulfilled" && r.value.v) map[r.value.t] = r.value.v; });
+    if (Object.keys(map).length > 0) setLiveMap(p => ({ ...p, ...map }));
+    setLr(Date.now()); setCd(60); setLd(false);
+  }, []);
+
+  useEffect(() => { refresh(); }, []);
+  useEffect(() => { const iv = setInterval(refresh, 60000); return () => clearInterval(iv); }, [refresh]);
+  useEffect(() => { const iv = setInterval(() => setCd(c => Math.max(0, c - 1)), 1000); return () => clearInterval(iv); }, [lr]);
+
+  const summary = useCallback(async () => {
+    setAl(true);
+    const s = ["SMX", "PGY", "QUBT", "BYND", "LUMN", "MNDY"].map(t => { const st = getS(t); return `${t}: $${fmtP(st.price)} (${st.change.toFixed(2)}%)`; }).join(", ");
+    try { ap(await askClaude(`סיכום שוק יומי עברית, 2 משפטים עד 40 מילים. תיק: ${s}. ישיר ותובנתי.`)); }
+    catch (e) { ap("שגיאה."); }
+    setAl(false);
+  }, [getS]);
+
+  useEffect(() => { if (lr) summary(); }, [lr]);
+
+  const rockets = Object.keys(ALL_STOCKS).map(t => getS(t)).filter(s => s.change >= 10).sort((a, b) => b.change - a.change);
+
+  const display = tab === "rockets" ? rockets : Object.keys(ALL_STOCKS)
+    .filter(t => { if (ALL_STOCKS[t].section !== tab) return false; if (!search.trim()) return true; return t.includes(search.toUpperCase()) || ALL_STOCKS[t].name.toLowerCase().includes(search.toLowerCase()); })
+    .map(t => getS(t));
+
+  const cur = CFG[tab], aiBusy = al || ag;
+
+  return (
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}body{background:#060b14}
+        @keyframes fadeSlide{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+        @keyframes slideIn{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:translateX(0)}}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+        @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:rgba(99,179,237,.2);border-radius:4px}
+        input:focus{outline:none}input::placeholder{color:rgba(255,255,255,.25)}
+      `}</style>
+
+      <div dir="rtl" style={{ minHeight: "100dvh", background: "#060b14", color: "#f7fafc", fontFamily: "Heebo,system-ui,sans-serif", padding: "14px 14px 40px", paddingTop: "calc(max(env(safe-area-inset-top,44px),44px) + 14px)" }}>
+        <div style={{ maxWidth: "1040px", margin: "0 auto" }}>
+
+          {/* header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+            <h1 style={{ fontFamily: "monospace", fontSize: "20px", fontWeight: "700" }}>Dani's <span style={{ color: "#63b3ed" }}>Money</span></h1>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div onClick={refresh} style={{ display: "flex", alignItems: "center", gap: "5px", background: "rgba(0,0,0,.3)", border: "1px solid rgba(255,255,255,.07)", borderRadius: "8px", padding: "5px 10px", cursor: "pointer" }}>
+                {ld ? <div style={{ width: "8px", height: "8px", border: "2px solid rgba(99,179,237,.2)", borderTop: "2px solid #63b3ed", borderRadius: "50%", animation: "spin .8s linear infinite" }} />
+                  : <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: "#68d391", boxShadow: "0 0 5px rgba(104,211,145,.6)" }} />}
+                <span style={{ fontSize: "10px", color: "rgba(255,255,255,.35)", fontFamily: "monospace" }}>{ld ? "..." : cd + "s"}</span>
+              </div>
+              <button onClick={() => setPort(true)} style={{ background: "rgba(167,139,250,.14)", border: "1px solid rgba(167,139,250,.3)", borderRadius: "8px", color: "#a78bfa", padding: "7px 14px", cursor: "pointer", fontSize: "13px", fontWeight: "600" }}>💼 תיק</button>
+            </div>
+          </div>
+
+          {/* AI bar */}
+          <div style={{ background: "linear-gradient(135deg,rgba(99,179,237,.07),rgba(99,179,237,.02))", border: "1px solid rgba(99,179,237,.17)", borderRadius: "9px", padding: "10px 14px", marginBottom: "11px", minHeight: "40px", display: "flex", alignItems: "center", gap: "9px" }}>
+            <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#63b3ed", flexShrink: 0, animation: aiBusy ? "pulse 1s infinite" : "none" }} />
+            <p style={{ fontSize: "12px", lineHeight: "1.6", color: "rgba(255,255,255,.65)", flex: 1, textAlign: "right", whiteSpace: "pre-wrap" }}>
+              {aiBusy && !ai && <span style={{ color: "rgba(255,255,255,.2)", fontStyle: "italic" }}>טוען סיכום...</span>}
+              {ai}{ag && <span style={{ display: "inline-block", width: "2px", height: "1em", background: "#63b3ed", marginRight: "2px", verticalAlign: "text-bottom", animation: "blink .7s step-end infinite" }} />}
+            </p>
+            {!aiBusy && <button onClick={summary} style={{ background: "none", border: "none", color: "rgba(99,179,237,.4)", cursor: "pointer", fontSize: "14px" }}>🔄</button>}
+          </div>
+
+          {/* search */}
+          {tab !== "rockets" && <input value={search} onChange={e => setSearch(e.target.value)} placeholder="חיפוש מניה..."
+            style={{ width: "100%", background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.1)", borderRadius: "8px", padding: "8px 12px", color: "#f7fafc", fontSize: "13px", marginBottom: "11px" }} />}
+
+          {/* tabs */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "5px", marginBottom: "14px" }}>
+            {Object.entries(CFG).map(([k, c]) => (
+              <button key={k} onClick={() => { setTab(k); setSearch(""); }}
+                style={{ padding: "8px 4px", borderRadius: "8px", fontSize: "12px", cursor: "pointer", transition: "all .15s", background: tab === k ? `rgba(${c.rgb},.2)` : "rgba(255,255,255,.03)", border: tab === k ? `1px solid rgba(${c.rgb},.5)` : "1px solid rgba(255,255,255,.08)", color: tab === k ? c.accent : "rgba(255,255,255,.4)", fontWeight: tab === k ? "700" : "400", position: "relative" }}>
+                {c.label}
+                {k === "rockets" && rockets.length > 0 && <span style={{ position: "absolute", top: "-7px", right: "-4px", background: "#fc8181", color: "#fff", borderRadius: "10px", fontSize: "9px", padding: "1px 5px", fontWeight: "800" }}>{rockets.length}</span>}
+              </button>
+            ))}
+          </div>
+
+          {/* rockets banner */}
+          {tab === "rockets" && <div style={{ background: "rgba(104,211,145,.07)", border: "1px solid rgba(104,211,145,.2)", borderRadius: "10px", padding: "12px 16px", marginBottom: "14px", display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{ fontSize: "26px", animation: "bounce 1.5s ease-in-out infinite", display: "block" }}>🚀</span>
+            <div>
+              <div style={{ fontSize: "13px", fontWeight: "700", color: "#68d391", marginBottom: "3px" }}>מניות ששטסו מעל 10%</div>
+              <div style={{ fontSize: "11px", color: "rgba(255,255,255,.4)" }}>{rockets.length > 0 ? `${rockets.length} מניות · רענון בעוד ${cd}s` : `אין כרגע · רענון בעוד ${cd}s`}</div>
+            </div>
+          </div>}
+
+          {/* section label for non-watch */}
+          {tab !== "rockets" && tab !== "watch" && <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+            <span style={{ fontSize: "11px", color: cur.accent, fontWeight: "600", whiteSpace: "nowrap" }}>{cur.label}</span>
+            <div style={{ height: "1px", flex: 1, background: `rgba(${cur.rgb},.15)` }} />
+          </div>}
+
+          {/* content */}
+          {tab === "watch"
+            ? <WatchSection stocks={display} onChart={setChart} />
+            : display.length > 0
+              ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: "10px" }}>
+                {display.map((s, i) => <Card key={s.ticker} s={s} i={i} accent={cur.accent} aRgb={cur.rgb} onChart={setChart} />)}
+              </div>
+              : <div style={{ textAlign: "center", padding: "50px 20px" }}>
+                <div style={{ fontSize: "36px", marginBottom: "10px" }}>{tab === "rockets" ? "😴" : "🔍"}</div>
+                <div style={{ color: "rgba(255,255,255,.25)", fontSize: "13px" }}>{tab === "rockets" ? `אין מניות מעל 10% · רענון בעוד ${cd}s` : "לא נמצאו תוצאות"}</div>
+              </div>
+          }
+
+          <div style={{ textAlign: "center", fontSize: "10px", color: "rgba(255,255,255,.1)", marginTop: "22px" }}>למטרות מידע בלבד · אין ייעוץ פיננסי</div>
+        </div>
+      </div>
+
+      {chart && <ChartPanel stock={chart} onClose={() => setChart(null)} liveMap={liveMap} />}
+      {port && <Portfolio onClose={() => setPort(false)} liveMap={liveMap} allStocks={ALL_STOCKS} />}
+    </>
+  );
+}
