@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Dani's Money"/>
+<meta name="theme-color" content="#060b14"/>
+<title>Dani's Money</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none;background:#060b14;color:#f0f4f8;font-family:'Heebo',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+:root{--sat:env(safe-area-inset-top,44px);--sab:env(safe-area-inset-bottom,0px)}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:rgba(99,179,237,.25);border-radius:4px}
+input,button{font-family:'Heebo',system-ui,sans-serif}
+input:focus{outline:none}
+input::placeholder{color:rgba(255,255,255,.2)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideRight{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- API KEY SCREEN -->
+
+<div id="keyScreen" style="display:none;position:fixed;inset:0;background:#060b14;z-index:9999;align-items:center;justify-content:center;padding:24px;padding-top:max(var(--sat),24px);animation:fadeIn .3s ease">
+  <div style="width:min(400px,100%);background:#0d1625;border:1px solid rgba(99,179,237,.2);border-radius:20px;padding:32px;box-shadow:0 40px 80px rgba(0,0,0,.6)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-size:36px;margin-bottom:10px">💰</div>
+      <div style="font-size:22px;font-weight:700;color:#f0f4f8;margin-bottom:6px">Dani's Money</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.3)">הכנס את מפתח ה-API להפעלה</div>
+    </div>
+    <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:rgba(255,255,255,.45);font-weight:600">Anthropic API Key</span>
+      <a href="https://console.anthropic.com" target="_blank" style="font-size:11px;color:#63b3ed;text-decoration:none">קבל מפתח ←</a>
+    </div>
+    <div style="position:relative;margin-bottom:16px">
+      <input id="keyInput" type="password" placeholder="sk-ant-api03-..."
+        style="width:100%;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 44px 12px 14px;color:#f0f4f8;font-size:13px;font-family:monospace"
+        onkeydown="if(event.key==='Enter')saveKey()"/>
+      <button onclick="togglePass()" id="eyeBtn" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;color:rgba(255,255,255,.35);cursor:pointer;padding:2px">👁</button>
+    </div>
+    <div id="keyError" style="display:none;background:rgba(252,129,129,.08);border:1px solid rgba(252,129,129,.2);border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#fc8181;text-align:center"></div>
+    <button onclick="saveKey()" style="width:100%;padding:14px;background:linear-gradient(135deg,rgba(99,179,237,.25),rgba(167,139,250,.2));border:1px solid rgba(99,179,237,.35);border-radius:10px;color:#f0f4f8;font-size:15px;font-weight:700;cursor:pointer">
+      שמור והפעל ←
+    </button>
+    <div style="margin-top:14px;font-size:10px;color:rgba(255,255,255,.15);text-align:center">🔒 נשמר מקומית בדפדפן בלבד</div>
+  </div>
+</div>
+
+<div id="app"></div>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin></script>
+
+<script>
+function togglePass(){
+  var i=document.getElementById('keyInput'),b=document.getElementById('eyeBtn');
+  i.type=i.type==='password'?'text':'password';
+  b.innerHTML=i.type==='password'?'👁':'🙈';
+}
+function saveKey(){
+  var val=document.getElementById('keyInput').value.trim();
+  var err=document.getElementById('keyError');
+  err.style.display='none';
+  if(!val){err.style.display='block';err.textContent='אנא הכנס את המפתח';return;}
+  if(!val.startsWith('sk-ant')){err.style.display='block';err.textContent='המפתח חייב להתחיל ב-sk-ant';return;}
+  localStorage.setItem('dm_key',val);
+  document.getElementById('keyScreen').style.display='none';
+  bootApp();
+}
+window.doResetKey=function(){
+  if(confirm('לאפס את ה-API Key?')){localStorage.removeItem('dm_key');location.reload();}
+};
+var _booted=false;
+function bootApp(){
+  if(_booted)return;
+  _booted=true;
+  waitLibs(function(){
+    var s=document.querySelector('script[type="text/babel"]');
+    if(!s)return;
+    try{
+      var code=Babel.transform(s.textContent,{presets:['react']}).code;
+      (new Function(code))();
+    }catch(e){
+      document.getElementById('app').innerHTML='<div style="color:#fc8181;padding:30px;text-align:center;font-family:monospace;font-size:13px">שגיאה: '+e.message+'<br><br><button onclick="location.reload()" style="background:rgba(252,129,129,.15);border:1px solid rgba(252,129,129,.3);color:#fc8181;padding:8px 20px;border-radius:8px;cursor:pointer">רענן</button></div>';
+    }
+  });
+}
+function waitLibs(cb){
+  if(typeof Babel!=='undefined'&&typeof React!=='undefined'&&typeof ReactDOM!=='undefined')cb();
+  else setTimeout(function(){waitLibs(cb);},50);
+}
+window.addEventListener('load',function(){
+  var k=localStorage.getItem('dm_key');
+  if(k&&k.startsWith('sk-ant'))bootApp();
+  else document.getElementById('keyScreen').style.display='flex';
+});
+</script>
+
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo}=React;
+const AKEY=()=>localStorage.getItem('dm_key')||'';
+const fmt=p=>p==null?'—':p<1?p.toFixed(4):p<10?p.toFixed(3):p.toFixed(2);
+const fmtMoney=n=>'$'+Math.abs(n).toLocaleString('en',{maximumFractionDigits:0});
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+// ── AI API ──
+async function callAI(prompt){
+  const key=AKEY();
+  if(!key)throw new Error('אין API key');
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),18000);
+  try{
+    const r=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',signal:ctrl.signal,
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-allow-browser':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:700,messages:[{role:'user',content:prompt}]}),
+    });
+    clearTimeout(timer);
+    if(!r.ok){
+      const e=await r.json().catch(()=>({}));
+      const msg=(e.error&&e.error.message)||('שגיאה '+r.status);
+      if(r.status===401)throw new Error('API Key לא תקין — לחץ ⚙️ לעדכון');
+      if(r.status===429)throw new Error('מגבלת שימוש — נסה שוב מאוחר יותר');
+      throw new Error(msg);
+    }
+    const d=await r.json();
+    return(d.content&&d.content[0]&&d.content[0].text)||'';
+  }catch(e){
+    clearTimeout(timer);
+    if(e.name==='AbortError')throw new Error('פג הזמן — נסה שוב');
+    throw e;
+  }
+}
+
+// ── Live price ──
+async function fetchPrice(ticker){
+  try{
+    const url='https://query1.finance.yahoo.com/v8/finance/chart/'+ticker+'?interval=1d&range=1d';
+    const r=await fetch('https://api.allorigins.win/get?url='+encodeURIComponent(url),{signal:AbortSignal.timeout(8000)});
+    if(!r.ok)return null;
+    const j=await r.json();
+    const data=JSON.parse(j.contents);
+    const meta=data&&data.chart&&data.chart.result&&data.chart.result[0]&&data.chart.result[0].meta;
+    if(!meta||!meta.regularMarketPrice)return null;
+    const price=meta.regularMarketPrice;
+    const prev=meta.chartPreviousClose||meta.previousClose||price;
+    const change=((price-prev)/prev)*100;
+    const state=meta.marketState;
+    let extPrice=null,extChange=null,extLabel=null;
+    if(state==='PRE'&&meta.preMarketPrice){extPrice=meta.preMarketPrice;extChange=((meta.preMarketPrice-price)/price)*100;extLabel='פרה';}
+    else if((state==='POST'||state==='CLOSED')&&meta.postMarketPrice){extPrice=meta.postMarketPrice;extChange=((meta.postMarketPrice-price)/price)*100;extLabel='אפטר';}
+    return{price,change,extPrice,extChange,extLabel,state};
+  }catch{return null;}
+}
+async function fetchAllPrices(tickers){
+  const results=await Promise.allSettled(tickers.map(t=>fetchPrice(t).then(v=>({t,v}))));
+  const map={};
+  results.forEach(r=>{if(r.status==='fulfilled'&&r.value&&r.value.v)map[r.value.t]=r.value.v;});
+  return map;
+}
+
+// ── Typewriter ──
+function useTypewriter(){
+  const [text,setText]=useState('');
+  const [running,setRunning]=useState(false);
+  const ivRef=useRef(null);
+  const play=useCallback(full=>{
+    clearInterval(ivRef.current);setText('');setRunning(true);
+    let i=0;
+    ivRef.current=setInterval(()=>{
+      i=Math.min(i+4,full.length);
+      setText(full.slice(0,i));
+      if(i>=full.length){setRunning(false);clearInterval(ivRef.current);}
+    },14);
+  },[]);
+  useEffect(()=>()=>clearInterval(ivRef.current),[]);
+  return{text,running,play};
+}
+
+// ── Candle generation ──
+function makeCandles(ticker,base){
+  let s=ticker.split('').reduce((a,c)=>a+c.charCodeAt(0),0)*997;
+  const rnd=()=>{s=(s*1664525+1013904223)>>>0;return s/0xffffffff;};
+  const out=[];let p=base*(0.85+rnd()*0.06);
+  for(let i=0;i<60;i++){
+    const o=p,c=o*(1+(rnd()-0.468)*(0.012+rnd()*0.02));
+    out.push({o,c,h:Math.max(o,c)*(1+rnd()*0.007),l:Math.min(o,c)*(1-rnd()*0.007)});
+    p=c;
+  }
+  return out;
+}
+function calcSMA(candles,n){return candles.map((_,i)=>i<n-1?null:candles.slice(i-n+1,i+1).reduce((a,x)=>a+x.c,0)/n);}
+function calcRSI(candles){
+  const g=[],l=[];
+  for(let i=1;i<candles.length;i++){const d=candles[i].c-candles[i-1].c;g.push(d>0?d:0);l.push(d<0?-d:0);}
+  return candles.map((_,i)=>{
+    if(i<14)return null;
+    const ag=g.slice(i-14,i).reduce((a,b)=>a+b,0)/14;
+    const al=l.slice(i-14,i).reduce((a,b)=>a+b,0)/14;
+    return al===0?100:100-100/(1+ag/al);
+  });
+}
+function calcLevels(candles){
+  const s=candles.slice(-30);
+  return{res:Math.max(...s.map(c=>c.h)),sup:Math.min(...s.map(c=>c.l))};
+}
+
+// ── Candle Chart ──
+function CandleChart({candles,livePrice}){
+  const svgRef=useRef();
+  const [tip,setTip]=useState(null);
+  const W=560,H=185,P={t:8,r:42,b:22,l:50};
+  const cw=W-P.l-P.r,ch=H-P.t-P.b;
+  const all=candles.flatMap(c=>[c.h,c.l]);
+  const mn=Math.min(...all)*0.997,mx=Math.max(...all)*1.003,rng=mx-mn;
+  const tx=i=>P.l+(i/(candles.length-1))*cw;
+  const ty=p=>P.t+ch-((p-mn)/rng)*ch;
+  const s20=calcSMA(candles,20),s50=calcSMA(candles,50);
+  const lv=calcLevels(candles);
+  const bw=Math.max(2.5,(cw/candles.length)*0.6);
+  const mkPath=arr=>{let d='';arr.forEach((v,i)=>{if(v==null)return;const x=tx(i).toFixed(1),y=ty(v).toFixed(1);d+=d?`L${x},${y}`:`M${x},${y}`;});return d;};
+  const MONTHS=['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצ'];
+  const now=new Date();
+  const xl=[0,20,40,59].map(i=>{const d=new Date(now);d.setDate(d.getDate()-(59-i));return{i,l:d.getDate()+' '+MONTHS[d.getMonth()]};});
+  const yg=[0,1,2,3,4].map(i=>mn+(rng*i)/4);
+  const onMove=e=>{
+    if(!svgRef.current)return;
+    const rect=svgRef.current.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)*(W/rect.width);
+    const idx=clamp(Math.round(((mx-P.l)/cw)*(candles.length-1)),0,candles.length-1);
+    const c=candles[idx];setTip({idx,o:c.o,c:c.c,y:ty(c.c)});
+  };
+  return(
+    <svg ref={svgRef} width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:'visible',cursor:'crosshair',display:'block'}}
+      onMouseMove={onMove} onMouseLeave={()=>setTip(null)}>
+      {yg.map((p,i)=>(
+        <g key={i}>
+          <line x1={P.l} y1={ty(p)} x2={W-P.r} y2={ty(p)} stroke="rgba(255,255,255,.04)"/>
+          <text x={P.l-4} y={ty(p)+4} textAnchor="end" fontSize="9" fill="rgba(255,255,255,.2)" fontFamily="monospace">{fmt(p)}</text>
+        </g>
+      ))}
+      {xl.map(x=><text key={x.i} x={tx(x.i)} y={H-3} textAnchor="middle" fontSize="9" fill="rgba(255,255,255,.2)">{x.l}</text>)}
+      <line x1={P.l} y1={ty(lv.res)} x2={W-P.r} y2={ty(lv.res)} stroke="rgba(252,129,129,.45)" strokeWidth="1" strokeDasharray="5,4"/>
+      <text x={W-P.r+3} y={ty(lv.res)+4} fontSize="8" fill="rgba(252,129,129,.55)" fontFamily="monospace">{fmt(lv.res)}</text>
+      <line x1={P.l} y1={ty(lv.sup)} x2={W-P.r} y2={ty(lv.sup)} stroke="rgba(104,211,145,.45)" strokeWidth="1" strokeDasharray="5,4"/>
+      <text x={W-P.r+3} y={ty(lv.sup)+4} fontSize="8" fill="rgba(104,211,145,.55)" fontFamily="monospace">{fmt(lv.sup)}</text>
+      {candles.map((c,i)=>{
+        const x=tx(i),up=c.c>=c.o,col=up?'#68d391':'#fc8181';
+        return(<g key={i}><line x1={x} y1={ty(c.h)} x2={x} y2={ty(c.l)} stroke={col} strokeWidth=".8" opacity=".75"/><rect x={x-bw/2} y={ty(Math.max(c.o,c.c))} width={bw} height={Math.max(1.5,Math.abs(ty(c.o)-ty(c.c)))} fill={col} opacity={tip&&tip.idx===i?1:.8}/></g>);
+      })}
+      <path d={mkPath(s20)} fill="none" stroke="#63b3ed" strokeWidth="1.5" opacity=".8"/>
+      <path d={mkPath(s50)} fill="none" stroke="#f6ad55" strokeWidth="1.5" opacity=".8"/>
+      {livePrice&&<line x1={P.l} y1={ty(livePrice)} x2={W-P.r} y2={ty(livePrice)} stroke="rgba(255,255,255,.18)" strokeWidth="1" strokeDasharray="3,3"/>}
+      {tip&&(()=>{
+        const x=tx(tip.idx);const tx2=Math.min(x+6,W-92);const ty2=clamp(tip.y-38,P.t,H-P.b-52);const up=tip.c>=tip.o;
+        return(<g>
+          <line x1={x} y1={P.t} x2={x} y2={H-P.b} stroke="rgba(255,255,255,.08)" strokeDasharray="3,3"/>
+          <circle cx={x} cy={ty(tip.c)} r="3" fill="#63b3ed" opacity=".9"/>
+          <rect x={tx2} y={ty2} width="88" height="48" rx="6" fill="rgba(6,11,20,.95)" stroke="rgba(99,179,237,.2)"/>
+          <text x={tx2+6} y={ty2+14} fontSize="9.5" fill="rgba(255,255,255,.45)" fontFamily="monospace">פתיחה {fmt(tip.o)}</text>
+          <text x={tx2+6} y={ty2+27} fontSize="9.5" fill="rgba(255,255,255,.45)" fontFamily="monospace">סגירה {fmt(tip.c)}</text>
+          <text x={tx2+6} y={ty2+41} fontSize="9.5" fill={up?'#68d391':'#fc8181'} fontFamily="monospace">{up?'▲':'▼'}{Math.abs((tip.c-tip.o)/tip.o*100).toFixed(2)}%</text>
+        </g>);
+      })()}
+    </svg>
+  );
+}
+
+function RSIChart({candles}){
+  const W=560,H=46,P={t:4,r:42,b:12,l:50};
+  const cw=W-P.l-P.r,ch=H-P.t-P.b;
+  const rsi=calcRSI(candles);
+  const tx=i=>P.l+(i/(candles.length-1))*cw;
+  const ty=v=>P.t+ch-(v/100)*ch;
+  let d='';rsi.forEach((v,i)=>{if(v==null)return;const x=tx(i).toFixed(1),y=ty(v).toFixed(1);d+=d?`L${x},${y}`:`M${x},${y}`;});
+  const last=rsi.filter(Boolean).pop()||50;
+  const col=last>70?'#fc8181':last<30?'#68d391':'#63b3ed';
+  return(
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'4px'}}>
+        <span style={{fontSize:'10px',color:'rgba(255,255,255,.28)'}}>RSI (14)</span>
+        <span style={{fontSize:'11px',fontWeight:'700',color:col,fontFamily:'monospace'}}>{last.toFixed(1)} · {last>70?'קנוי יתר':last<30?'מכור יתר':'נייטרל'}</span>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{display:'block'}}>
+        {[70,50,30].map(v=>(
+          <g key={v}>
+            <line x1={P.l} y1={ty(v)} x2={W-P.r} y2={ty(v)} stroke={v===70?'rgba(252,129,129,.18)':v===30?'rgba(104,211,145,.18)':'rgba(255,255,255,.05)'} strokeWidth="1" strokeDasharray={v!==50?'4,3':undefined}/>
+            <text x={P.l-4} y={ty(v)+3} textAnchor="end" fontSize="8" fill="rgba(255,255,255,.18)" fontFamily="monospace">{v}</text>
+          </g>
+        ))}
+        <path d={d} fill="none" stroke={col} strokeWidth="1.5" opacity=".9"/>
+      </svg>
+    </div>
+  );
+}
+
+// ── Slide Panel ──
+function SlidePanel({onClose,accentHex,children}){
+  return(<>
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.65)',zIndex:250,animation:'fadeIn .25s ease'}}/>
+    <div dir="rtl" style={{position:'fixed',top:0,right:0,height:'100dvh',width:'min(700px,100vw)',background:'#080e1a',borderLeft:`1px solid ${accentHex}33`,display:'flex',flexDirection:'column',zIndex:300,animation:'slideRight .28s ease',boxShadow:'-24px 0 70px rgba(0,0,0,.7)',paddingTop:'max(env(safe-area-inset-top,44px),44px)',paddingBottom:'env(safe-area-inset-bottom,0px)'}}>
+      {children}
+    </div>
+  </>);
+}
+
+// ── Chart Panel ──
+function ChartPanel({stock,liveMap,onClose}){
+  const tw=useTypewriter();
+  const [loading,setLoading]=useState(false);
+  const live=liveMap[stock.ticker];
+  const price=live?live.price:stock.price;
+  const change=live?live.change:stock.change;
+  const candles=useMemo(()=>makeCandles(stock.ticker,price),[stock.ticker,price]);
+  const lv=calcLevels(candles);
+  const lastRSI=calcRSI(candles).filter(Boolean).pop()||50;
+  const analyze=useCallback(async()=>{
+    if(loading||tw.running)return;
+    setLoading(true);
+    try{
+      tw.play(await callAI(
+        `נתח את המניה ${stock.ticker} (${stock.name}) בעברית בלבד.\n`+
+        `מחיר=$${fmt(price)}, שינוי=${change.toFixed(2)}%, תמיכה=$${fmt(lv.sup)}, התנגדות=$${fmt(lv.res)}, RSI=${lastRSI.toFixed(1)}\n`+
+        `כתוב 3 פסקאות קצרות ללא כוכביות וללא כותרות:\n1. מצב המחיר\n2. מה האינדיקטורים מראים\n3. תרחיש מסחר מומלץ`
+      ));
+    }catch(e){tw.play('שגיאה: '+e.message);}
+    setLoading(false);
+  },[stock.ticker,price,change]);
+  useEffect(()=>{analyze();},[analyze]);
+  const busy=loading||tw.running;
+  const pos=change>=0;
+  return(
+    <SlidePanel onClose={onClose} accentHex="#63b3ed">
+      <div style={{padding:'12px 18px',borderBottom:'1px solid rgba(255,255,255,.06)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',flex:1,minWidth:0}}>
+          <span style={{fontFamily:'monospace',fontSize:'17px',fontWeight:'700',color:'#63b3ed'}}>{stock.ticker}</span>
+          <span style={{fontSize:'11px',color:'rgba(255,255,255,.38)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{stock.name}</span>
+          <span style={{fontSize:'12px',fontWeight:'700',color:pos?'#68d391':'#fc8181',fontFamily:'monospace',flexShrink:0}}>{pos?'▲':'▼'}{Math.abs(change).toFixed(2)}%</span>
+          {live&&<span style={{fontSize:'8px',color:'#68d391',background:'rgba(104,211,145,.12)',padding:'2px 6px',borderRadius:'4px',flexShrink:0}}>● LIVE</span>}
+          {live&&live.extLabel&&<span style={{fontSize:'9px',color:'rgba(255,255,255,.45)',background:'rgba(255,255,255,.06)',padding:'2px 7px',borderRadius:'4px',flexShrink:0}}>🌙{live.extLabel} <span style={{color:live.extChange>=0?'#68d391':'#fc8181'}}>{live.extChange>=0?'▲':'▼'}{Math.abs(live.extChange||0).toFixed(2)}%</span></span>}
+        </div>
+        <button onClick={onClose} style={{background:'rgba(255,255,255,.07)',border:'1px solid rgba(255,255,255,.14)',color:'#f0f4f8',padding:'7px 14px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',flexShrink:0,cursor:'pointer'}}>✕</button>
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'14px 16px',display:'flex',flexDirection:'column',gap:'10px'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px'}}>
+          {[{l:'תמיכה',v:'$'+fmt(lv.sup),c:'#68d391'},{l:'מחיר',v:'$'+fmt(price),c:'#f0f4f8'},{l:'התנגדות',v:'$'+fmt(lv.res),c:'#fc8181'}].map(s=>(
+            <div key={s.l} style={{background:'rgba(255,255,255,.03)',border:'1px solid rgba(255,255,255,.07)',borderRadius:'10px',padding:'10px',textAlign:'center'}}>
+              <div style={{fontSize:'9px',color:'rgba(255,255,255,.28)',marginBottom:'4px'}}>{s.l}</div>
+              <div style={{fontSize:'13px',fontWeight:'700',color:s.c,fontFamily:'monospace'}}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{background:'rgba(0,0,0,.35)',borderRadius:'12px',padding:'12px 10px 8px',border:'1px solid rgba(255,255,255,.05)'}}>
+          <div style={{display:'flex',gap:'14px',marginBottom:'6px'}}>
+            {[{c:'#63b3ed',l:'MA20'},{c:'#f6ad55',l:'MA50'}].map(m=>(
+              <div key={m.l} style={{display:'flex',alignItems:'center',gap:'5px'}}>
+                <div style={{width:'16px',height:'2px',background:m.c,borderRadius:'2px'}}/>
+                <span style={{fontSize:'10px',color:'rgba(255,255,255,.3)'}}>{m.l}</span>
+              </div>
+            ))}
+          </div>
+          <CandleChart candles={candles} livePrice={price}/>
+        </div>
+        <div style={{background:'rgba(0,0,0,.35)',borderRadius:'12px',padding:'10px 10px 8px',border:'1px solid rgba(255,255,255,.05)'}}>
+          <RSIChart candles={candles}/>
+        </div>
+        <div style={{background:'rgba(99,179,237,.04)',border:'1px solid rgba(99,179,237,.14)',borderRadius:'12px',padding:'14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
+              <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#63b3ed',animation:busy?'pulse 1.2s infinite':'none'}}/>
+              <span style={{fontSize:'12px',color:'#63b3ed',fontWeight:'600'}}>ניתוח AI</span>
+              {busy&&<span style={{fontSize:'10px',color:'rgba(255,255,255,.3)',fontStyle:'italic'}}>כותב...</span>}
+            </div>
+            <button onClick={analyze} disabled={busy} style={{background:'rgba(99,179,237,.1)',border:'1px solid rgba(99,179,237,.2)',borderRadius:'7px',color:'#63b3ed',fontSize:'11px',padding:'4px 10px',opacity:busy?0.45:1,cursor:busy?'not-allowed':'pointer'}}>
+              {busy?'⏳':'🔄 רענן'}
+            </button>
+          </div>
+          <div style={{fontSize:'13px',lineHeight:'1.9',color:'rgba(255,255,255,.75)',textAlign:'right',minHeight:'48px',whiteSpace:'pre-wrap'}}>
+            {loading&&!tw.text&&<span style={{color:'rgba(255,255,255,.2)',fontStyle:'italic'}}>מנתח...</span>}
+            {tw.text}
+            {tw.running&&<span style={{display:'inline-block',width:'2px',height:'14px',background:'#63b3ed',marginRight:'2px',verticalAlign:'middle',animation:'blink .7s step-end infinite'}}/>}
+          </div>
+        </div>
+      </div>
+    </SlidePanel>
+  );
+}
+
+// ══════════════════════════════
+// PORTFOLIO PANEL
+// ══════════════════════════════
+const DEFAULT_LOTS=[
+  {id:1,ticker:'SMX', shares:3000,buy:5.10, sell:3.90, done:true, date:'2024-01-15'},
+  {id:2,ticker:'SMX', shares:3000,buy:1.67, sell:null,  done:false,date:'2024-06-20'},
+  {id:3,ticker:'PGY', shares:3000,buy:13.97,sell:null,  done:false,date:'2024-03-10'},
+  {id:4,ticker:'QUBT',shares:4500,buy:11.15,sell:null,  done:false,date:'2024-04-05'},
+  {id:5,ticker:'BYND',shares:7500,buy:1.68, sell:null,  done:false,date:'2024-02-28'},
+  {id:6,ticker:'LUMN',shares:1500,buy:8.06, sell:null,  done:false,date:'2024-05-12'},
+  {id:7,ticker:'MNDY',shares:63,  buy:181.03,sell:null, done:false,date:'2023-11-20'},
+];
+
+function PortfolioPanel({liveMap,allStocks,onClose}){
+  const [lots,setLots]=useState(null);
+  const [tab,setTab]=useState('active');
+  const [sellPrices,setSellPrices]=useState({});
+  const [newLot,setNewLot]=useState({ticker:'',shares:'',buy:'',sell:'',done:false,date:''});
+  const [ratings,setRatings]=useState(null);
+  const [diagLoading,setDiagLoading]=useState(false);
+  const [savedFlash,setSavedFlash]=useState(false);
+  const dtw=useTypewriter();
+
+  useEffect(()=>{
+    try{const s=localStorage.getItem('dm_lots');setLots(s?JSON.parse(s):DEFAULT_LOTS);}
+    catch{setLots(DEFAULT_LOTS);}
+  },[]);
+
+  useEffect(()=>{
+    if(lots===null)return;
+    try{localStorage.setItem('dm_lots',JSON.stringify(lots));setSavedFlash(true);setTimeout(()=>setSavedFlash(false),1500);}
+    catch{}
+  },[lots]);
+
+  const getPrice=t=>{
+    const u=(t||'').toUpperCase();
+    return (liveMap[u]&&liveMap[u].price)||(allStocks[u]&&allStocks[u].price)||null;
+  };
+
+  const soldTickers=useMemo(()=>new Set((lots||[]).filter(l=>l.done).map(l=>l.ticker.toUpperCase())),[lots]);
+
+  const enrich=lot=>{
+    if(lot.done){const pnl=(lot.sell-lot.buy)*lot.shares;return{...lot,pnl,pnlPct:((lot.sell-lot.buy)/lot.buy)*100};}
+    const price=getPrice(lot.ticker);
+    const cost=lot.buy*lot.shares;
+    const value=price!=null?price*lot.shares:null;
+    const pnl=value!=null?value-cost:null;
+    return{...lot,price,cost,value,pnl,pnlPct:cost>0&&pnl!=null?(pnl/cost)*100:null,isRepeat:soldTickers.has(lot.ticker.toUpperCase())};
+  };
+
+  if(!lots)return null;
+
+  const active=lots.filter(l=>!l.done).map(enrich);
+  const closed=lots.filter(l=>l.done).map(enrich);
+  const tV=active.reduce((a,h)=>a+(h.value!=null?h.value:h.cost),0);
+  const tC=active.reduce((a,h)=>a+h.cost,0);
+  const tP=tV-tC,tPct=tC>0?(tP/tC)*100:0;
+  const tR=closed.reduce((a,h)=>a+h.pnl,0);
+
+  const addLot=()=>{
+    if(!newLot.ticker.trim()||!newLot.shares||!newLot.buy)return;
+    const id=Math.max(0,...lots.map(l=>l.id))+1;
+    setLots(p=>[...p,{id,ticker:newLot.ticker.toUpperCase().trim(),shares:+newLot.shares,buy:+newLot.buy,sell:newLot.done&&newLot.sell?+newLot.sell:null,done:newLot.done,date:newLot.date||new Date().toISOString().slice(0,10)}]);
+    setNewLot({ticker:'',shares:'',buy:'',sell:'',done:false,date:''});
+  };
+  const removeLot=id=>setLots(p=>p.filter(l=>l.id!==id));
+  const markSold=(id,sp)=>{
+    if(!sp||isNaN(+sp))return;
+    setLots(p=>p.map(l=>l.id===id?{...l,done:true,sell:+sp}:l));
+    setSellPrices(p=>{const o={...p};delete o[id];return o;});
+  };
+
+  const diagnose=async()=>{
+    setDiagLoading(true);setTab('ai');setRatings(null);
+    const lines=active.map(h=>`${h.ticker}: ${h.shares.toLocaleString()} מניות, קנייה $${fmt(h.buy)}, מחיר ${h.price?'$'+fmt(h.price):'?'}, P&L ${h.pnlPct!=null?h.pnlPct.toFixed(1)+'%':'N/A'}${h.isRepeat?' [חוזר]':''}`).join('\n');
+    try{
+      const jraw=await callAI(`אנליסט — JSON בלבד ללא טקסט נוסף:\n${lines}\n[{"ticker":"X","action":"BUY","score":7,"reason":"סיבה עד 7 מילים בעברית"}]\naction: BUY/HOLD/SELL`);
+      try{setRatings(JSON.parse(jraw.replace(/```json|```/g,'').trim()));}catch{}
+      dtw.play(await callAI(`אבחן תיק בעברית:\n${lines}\nP&L: ${tP>=0?'+':''}${tPct.toFixed(1)}%, ממומש: $${tR.toFixed(0)}\n3 פסקאות: מצב התיק, המניות המבטיחות, המלצות פעולה`));
+    }catch(e){dtw.play('שגיאה: '+e.message);}
+    setDiagLoading(false);
+  };
+
+  const diagBusy=diagLoading||dtw.running;
+  const inp={width:'100%',background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.1)',borderRadius:'8px',padding:'8px 10px',color:'#f0f4f8',fontSize:'13px',fontFamily:'monospace'};
+
+  return(
+    <SlidePanel onClose={onClose} accentHex="#a78bfa">
+      <div style={{padding:'12px 18px',borderBottom:'1px solid rgba(255,255,255,.06)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+        <div>
+          <div style={{fontSize:'16px',fontWeight:'700',color:'#a78bfa'}}>💼 תיק השקעות</div>
+          <div style={{fontSize:'10px',marginTop:'2px',color:savedFlash?'#68d391':'rgba(255,255,255,.2)'}}>{savedFlash?'✓ נשמר':'שמירה אוטומטית'}</div>
+        </div>
+        <button onClick={onClose} style={{background:'rgba(255,255,255,.07)',border:'1px solid rgba(255,255,255,.14)',color:'#f0f4f8',padding:'7px 14px',borderRadius:'8px',fontSize:'13px',fontWeight:'600',cursor:'pointer'}}>✕</button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'4px',padding:'10px 18px',background:'rgba(167,139,250,.05)',borderBottom:'1px solid rgba(255,255,255,.05)',flexShrink:0}}>
+        {[{l:'שווי',v:fmtMoney(tV),c:'#f0f4f8'},{l:'עלות',v:fmtMoney(tC),c:'rgba(255,255,255,.4)'},{l:'P&L',v:(tP>=0?'+':'')+tPct.toFixed(1)+'%',c:tP>=0?'#68d391':'#fc8181'},{l:'ממומש',v:(tR>=0?'+':'-')+fmtMoney(tR),c:tR>=0?'#68d391':'#fc8181'}].map(s=>(
+          <div key={s.l} style={{textAlign:'center'}}>
+            <div style={{fontSize:'8px',color:'rgba(255,255,255,.25)',marginBottom:'3px'}}>{s.l}</div>
+            <div style={{fontFamily:'monospace',fontSize:'11px',fontWeight:'700',color:s.c}}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:'flex',borderBottom:'1px solid rgba(255,255,255,.06)',flexShrink:0}}>
+        {[{k:'active',l:'📈 פעיל'},{k:'closed',l:'📉 נמכר'},{k:'add',l:'➕ הוסף'},{k:'ai',l:'🤖 אבחון'}].map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)} style={{flex:1,padding:'10px 2px',background:'none',border:'none',borderBottom:`2px solid ${tab===t.k?'#a78bfa':'transparent'}`,color:tab===t.k?'#a78bfa':'rgba(255,255,255,.32)',fontSize:'11px',fontWeight:tab===t.k?'700':'400',cursor:'pointer'}}>{t.l}</button>
+        ))}
+      </div>
+      <div style={{flex:1,overflowY:'auto',padding:'14px 16px'}}>
+
+        {tab==='active'&&<div>
+          {active.length===0&&<div style={{textAlign:'center',padding:'40px',color:'rgba(255,255,255,.2)',fontSize:'13px'}}>אין פוזיציות פעילות</div>}
+          {active.map(h=>(
+            <div key={h.id} style={{background:'rgba(255,255,255,.02)',border:`1px solid ${h.isRepeat?'rgba(251,191,36,.22)':'rgba(255,255,255,.07)'}`,borderRadius:'12px',padding:'12px',marginBottom:'10px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
+                <div>
+                  <div style={{display:'flex',alignItems:'center',gap:'7px',marginBottom:'3px'}}>
+                    <span style={{fontFamily:'monospace',fontSize:'15px',fontWeight:'700',color:'#a78bfa'}}>{h.ticker}</span>
+                    {h.isRepeat&&<span style={{fontSize:'9px',background:'rgba(251,191,36,.14)',color:'#fbbf24',padding:'2px 7px',borderRadius:'20px'}}>🔄 חוזר</span>}
+                  </div>
+                  <div style={{fontSize:'10px',color:'rgba(255,255,255,.28)'}}>{h.shares.toLocaleString()} מניות · קנייה ${fmt(h.buy)} · {h.date}</div>
+                </div>
+                <button onClick={()=>removeLot(h.id)} style={{background:'rgba(252,129,129,.08)',border:'1px solid rgba(252,129,129,.18)',color:'#fc8181',width:'26px',height:'26px',borderRadius:'7px',fontSize:'12px',flexShrink:0,cursor:'pointer'}}>✕</button>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'6px',marginBottom:'10px'}}>
+                {[{l:'עלות',v:fmtMoney(h.cost)},{l:'מחיר',v:h.price?'$'+fmt(h.price):'—'},{l:'P&L',v:h.pnlPct!=null?(h.pnlPct>=0?'+':'')+h.pnlPct.toFixed(1)+'%':'—',c:h.pnlPct==null?'rgba(255,255,255,.3)':h.pnlPct>=0?'#68d391':'#fc8181'}].map((s,i)=>(
+                  <div key={i} style={{background:'rgba(0,0,0,.25)',borderRadius:'8px',padding:'7px',textAlign:'center'}}>
+                    <div style={{fontSize:'8px',color:'rgba(255,255,255,.25)',marginBottom:'3px'}}>{s.l}</div>
+                    <div style={{fontFamily:'monospace',fontSize:'12px',fontWeight:s.c?'700':'400',color:s.c||'rgba(255,255,255,.65)'}}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:'flex',gap:'7px'}}>
+                <input value={sellPrices[h.id]||''} onChange={e=>{const id=h.id,v=e.target.value;setSellPrices(p=>({...p,[id]:v}));}} placeholder="מחיר מכירה $" style={{...inp,flex:1}}/>
+                <button onClick={()=>markSold(h.id,sellPrices[h.id])} style={{background:'rgba(252,129,129,.12)',border:'1px solid rgba(252,129,129,.28)',borderRadius:'8px',color:'#fc8181',padding:'8px 12px',fontSize:'12px',fontWeight:'600',whiteSpace:'nowrap',cursor:'pointer'}}>רשום מכירה</button>
+              </div>
+            </div>
+          ))}
+          {active.length>0&&<button onClick={diagnose} disabled={diagBusy} style={{width:'100%',padding:'12px',background:'linear-gradient(135deg,rgba(167,139,250,.2),rgba(99,179,237,.15))',border:'1px solid rgba(167,139,250,.38)',borderRadius:'10px',color:'#a78bfa',fontSize:'14px',fontWeight:'700',marginTop:'4px',opacity:diagBusy?0.55:1,cursor:diagBusy?'not-allowed':'pointer'}}>{diagBusy?'⏳ מאבחן...':'🔍 אבחון AI לתיק'}</button>}
+        </div>}
+
+        {tab==='closed'&&<div>
+          {closed.length===0&&<div style={{textAlign:'center',padding:'40px',color:'rgba(255,255,255,.2)',fontSize:'13px'}}>אין עסקאות סגורות</div>}
+          {closed.map(h=>(
+            <div key={h.id} style={{background:'rgba(255,255,255,.02)',border:'1px solid rgba(255,255,255,.06)',borderRadius:'12px',padding:'12px',marginBottom:'8px'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
+                <div><span style={{fontFamily:'monospace',fontSize:'14px',fontWeight:'700',color:'rgba(255,255,255,.4)'}}>{h.ticker}</span><span style={{fontSize:'10px',color:'rgba(255,255,255,.22)',marginRight:'10px'}}> · {h.shares.toLocaleString()} · {h.date}</span></div>
+                <button onClick={()=>removeLot(h.id)} style={{background:'none',border:'none',color:'rgba(255,255,255,.2)',fontSize:'13px',cursor:'pointer'}}>✕</button>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'6px'}}>
+                {[{l:'קניה',v:'$'+fmt(h.buy)},{l:'מכירה',v:'$'+fmt(h.sell)},{l:'רווח/הפסד',v:(h.pnl>=0?'+':'-')+fmtMoney(h.pnl),sub:(h.pnlPct>=0?'+':'')+h.pnlPct.toFixed(1)+'%',c:h.pnl>=0?'#68d391':'#fc8181'}].map((s,i)=>(
+                  <div key={i} style={{background:s.c?`rgba(${s.c==='#68d391'?'104,211,145':'252,129,129'},.07)`:'rgba(0,0,0,.2)',border:s.c?`1px solid rgba(${s.c==='#68d391'?'104,211,145':'252,129,129'},.18)`:undefined,borderRadius:'8px',padding:'7px',textAlign:'center'}}>
+                    <div style={{fontSize:'8px',color:'rgba(255,255,255,.28)',marginBottom:'3px'}}>{s.l}</div>
+                    <div style={{fontFamily:'monospace',fontSize:'12px',fontWeight:'700',color:s.c||'rgba(255,255,255,.55)'}}>{s.v}</div>
+                    {s.sub&&<div style={{fontFamily:'monospace',fontSize:'10px',color:s.c}}>{s.sub}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>}
+
+        {tab==='add'&&(
+          <div style={{background:'rgba(167,139,250,.04)',border:'1px solid rgba(167,139,250,.14)',borderRadius:'12px',padding:'16px'}}>
+            <div style={{fontSize:'13px',fontWeight:'700',color:'rgba(255,255,255,.45)',marginBottom:'14px'}}>הוספת עסקה חדשה</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'12px'}}>
+              {[{k:'ticker',l:'טיקר',p:'AAPL'},{k:'shares',l:'מניות',p:'100'},{k:'buy',l:'מחיר קניה ($)',p:'150.00'},{k:'date',l:'תאריך',p:'2024-01-01'}].map(f=>(
+                <div key={f.k}>
+                  <div style={{fontSize:'10px',color:'rgba(255,255,255,.3)',marginBottom:'4px'}}>{f.l}</div>
+                  <input value={newLot[f.k]} onChange={e=>{const k=f.k,v=e.target.value;setNewLot(p=>({...p,[k]:v}));}} placeholder={f.p} style={inp}/>
+                </div>
+              ))}
+            </div>
+            <label style={{display:'flex',alignItems:'center',gap:'10px',cursor:'pointer',padding:'10px',background:'rgba(255,255,255,.03)',borderRadius:'8px',marginBottom:'10px'}}>
+              <input type="checkbox" checked={newLot.done} onChange={e=>{const v=e.target.checked;setNewLot(p=>({...p,done:v}));}} style={{width:'16px',height:'16px',cursor:'pointer'}}/>
+              <span style={{fontSize:'13px',color:'rgba(255,255,255,.55)'}}>מניה שכבר נמכרה</span>
+            </label>
+            {newLot.done&&<div style={{marginBottom:'12px'}}>
+              <div style={{fontSize:'10px',color:'rgba(255,255,255,.3)',marginBottom:'4px'}}>מחיר מכירה ($)</div>
+              <input value={newLot.sell} onChange={e=>{const v=e.target.value;setNewLot(p=>({...p,sell:v}));}} placeholder="200.00" style={{...inp,borderColor:'rgba(252,129,129,.22)'}}/>
+            </div>}
+            <button onClick={addLot} style={{width:'100%',padding:'11px',background:'rgba(167,139,250,.18)',border:'1px solid rgba(167,139,250,.38)',borderRadius:'9px',color:'#a78bfa',fontSize:'14px',fontWeight:'700',cursor:'pointer'}}>+ הוסף עסקה</button>
+          </div>
+        )}
+
+        {tab==='ai'&&<div>
+          {!dtw.text&&!diagLoading&&!ratings&&<div style={{textAlign:'center',padding:'40px',color:'rgba(255,255,255,.2)',fontSize:'13px'}}>עבור ללשונית פעיל ולחץ אבחון AI</div>}
+          {diagLoading&&!ratings&&<div style={{textAlign:'center',padding:'30px',color:'rgba(255,255,255,.2)',fontStyle:'italic'}}>⏳ מנתח את התיק...</div>}
+          {ratings&&<div style={{marginBottom:'16px'}}>
+            <div style={{fontSize:'12px',color:'rgba(255,255,255,.3)',fontWeight:'600',marginBottom:'10px'}}>דירוג AI</div>
+            {[...ratings].sort((a,b)=>b.score-a.score).map(r=>{
+              const isBuy=r.action==='BUY',isSell=r.action==='SELL';
+              const col=isBuy?'#68d391':isSell?'#fc8181':'rgba(255,255,255,.4)';
+              const rgb=isBuy?'104,211,145':isSell?'252,129,129':'200,200,200';
+              return(
+                <div key={r.ticker} style={{background:`rgba(${rgb},.05)`,border:`1px solid rgba(${rgb},.2)`,borderRadius:'10px',padding:'11px 13px',marginBottom:'8px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{fontFamily:'monospace',fontSize:'15px',fontWeight:'700',color:col}}>{r.ticker}</span>
+                      <span style={{fontSize:'10px',padding:'2px 9px',background:`rgba(${rgb},.16)`,borderRadius:'20px',color:col,fontWeight:'600'}}>{isBuy?'📈 קנה':isSell?'📉 מכור':'⏸ החזק'}</span>
+                    </div>
+                    <span style={{fontFamily:'monospace',fontSize:'15px',fontWeight:'700',color:col}}>{r.score}/10</span>
+                  </div>
+                  <div style={{height:'4px',background:'rgba(255,255,255,.07)',borderRadius:'4px',marginBottom:'6px',overflow:'hidden'}}>
+                    <div style={{height:'100%',width:((r.score||0)/10*100)+'%',background:col,borderRadius:'4px'}}/>
+                  </div>
+                  <div style={{fontSize:'11px',color:'rgba(255,255,255,.48)',textAlign:'right'}}>{r.reason}</div>
+                </div>
+              );
+            })}
+          </div>}
+          {(dtw.text||dtw.running)&&<div style={{background:'rgba(167,139,250,.04)',border:'1px solid rgba(167,139,250,.14)',borderRadius:'12px',padding:'14px'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'7px'}}>
+                <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#a78bfa',animation:dtw.running?'pulse 1.2s infinite':'none'}}/>
+                <span style={{fontSize:'12px',color:'#a78bfa',fontWeight:'600'}}>ניתוח תיק</span>
+              </div>
+              {!diagBusy&&<button onClick={diagnose} style={{background:'rgba(167,139,250,.1)',border:'1px solid rgba(167,139,250,.2)',borderRadius:'7px',color:'#a78bfa',fontSize:'11px',padding:'4px 10px',cursor:'pointer'}}>🔄 רענן</button>}
+            </div>
+            <div style={{fontSize:'13px',lineHeight:'1.9',color:'rgba(255,255,255,.75)',textAlign:'right',whiteSpace:'pre-wrap'}}>
+              {dtw.text}
+              {dtw.running&&<span style={{display:'inline-block',width:'2px',height:'14px',background:'#a78bfa',marginRight:'2px',verticalAlign:'middle',animation:'blink .7s step-end infinite'}}/>}
+            </div>
+          </div>}
+        </div>}
+      </div>
+    </SlidePanel>
+  );
+}
+
+// ══════════════════════════════
+// STOCK DATA
+// ══════════════════════════════
+const ALL_STOCKS={
+  SMX: {name:'SMX Security Matters',  price:4.35,  change:-11.59,sector:'ביטחון',   section:'myport'},
+  PGY: {name:'Pagaya Technologies',   price:14.32, change:-4.98, sector:'פינטק',    section:'myport'},
+  QUBT:{name:'Quantum Computing',     price:9.41,  change:-4.27, sector:'קוואנטום', section:'myport'},
+  BYND:{name:'Beyond Meat',           price:1.045, change:-9.91, sector:'מזון',     section:'myport'},
+  LUMN:{name:'Lumen Technologies',    price:8.73,  change:0.69,  sector:'תקשורת',   section:'myport'},
+  MNDY:{name:'monday.com',            price:67.86, change:-0.80, sector:'SaaS',     section:'myport'},
+  TSLA:{name:'Tesla Inc.',            price:386.42,change:-1.55, sector:'רכב',      section:'compare'},
+  LI:  {name:'Li Auto Inc.',          price:18.50, change:-1.12, sector:'רכב סיני', section:'compare'},
+  AAPL:{name:'Apple Inc.',            price:266.17,change:-2.52, sector:'טכנולוגיה',section:'compare'},
+  GOOG:{name:'Alphabet Inc.',         price:330.47,change:-1.47, sector:'טכנולוגיה',section:'compare'},
+  NVDA:{name:'NVIDIA Corporation',    price:199.88,change:-1.08, sector:'מוליכים',  section:'compare'},
+  AMZN:{name:'Amazon.com',            price:249.91,change:0.66,  sector:'ענן/מסחר', section:'compare'},
+  MSFT:{name:'Microsoft Corp.',       price:424.16,change:1.46,  sector:'טכנולוגיה',section:'compare'},
+  META:{name:'Meta Platforms',        price:668.84,change:-0.31, sector:'טכנולוגיה',section:'compare'},
+  BX:  {name:'Blackstone Inc.',       price:128.50,change:-0.38, sector:'פיננסים',  section:'compare'},
+  APP: {name:'AppLovin',              price:473.18,change:-3.62, sector:'טכנולוגיה',section:'watch',watchScore:8,watchNote:'צמיחה חזקה בפרסום דיגיטלי'},
+  SEDG:{name:'SolarEdge Tech',        price:40.57, change:1.88,  sector:'אנרגיה',   section:'watch',watchScore:8,watchNote:'פוטנציאל חזרה גבוה'},
+  AUID:{name:'authID Inc.',           price:1.27,  change:7.63,  sector:'אבטחה',    section:'watch',watchScore:7,watchNote:'ביקוש גבוה לאבטחת AI'},
+  LCID:{name:'Lucid Group',           price:7.11,  change:5.33,  sector:'EV',       section:'watch',watchScore:7,watchNote:'מומנטום עולה'},
+  ET:  {name:'Energy Transfer LP',    price:18.96, change:0.26,  sector:'אנרגיה',   section:'watch',watchScore:7,watchNote:'דיבידנד גבוה ויציב'},
+  OPEN:{name:'Opendoor Technologies', price:5.45,  change:1.87,  sector:'נדלן',     section:'watch',watchScore:7,watchNote:'שוק נדלן מתאושש'},
+  SMCI:{name:'Super Micro Computer',  price:28.43, change:-1.32, sector:'שרתים',    section:'watch',watchScore:5,watchNote:'תלוי דוחות קרובים'},
+  NIO: {name:'NIO Inc.',              price:6.43,  change:-3.45, sector:'רכב סיני', section:'watch',watchScore:5,watchNote:'תלוי מדיניות סינית'},
+  INTC:{name:'Intel Corporation',     price:21.65, change:0.85,  sector:'מוליכים',  section:'watch',watchScore:5,watchNote:'מבנה מחדש בתהליך'},
+  MBLY:{name:'Mobileye Global',       price:7.87,  change:-2.11, sector:'אוטונומי', section:'watch',watchScore:5,watchNote:'לחץ תחרותי'},
+  EKSO:{name:'Ekso Bionics',          price:11.12, change:-2.28, sector:'רובוטיקה', section:'watch',watchScore:5,watchNote:'שוק נישה'},
+  PTON:{name:'Peloton Interactive',   price:5.00,  change:-3.47, sector:'כושר',     section:'watch',watchScore:4,watchNote:'מאבק בחזרה'},
+  ANL: {name:'Adlai Nortye Ltd.',     price:15.96, change:-3.86, sector:'ביוטק',    section:'watch',watchScore:5,watchNote:'ממתין לתוצאות'},
+  OTLK:{name:'Outlook Therapeutics',  price:0.3194,change:-13.68,sector:'ביוטק',    section:'watch',watchScore:2,watchNote:'ירידה חדה, סיכון גבוה'},
+  BIRD:{name:'Allbirds',              price:8.50,  change:-22.87,sector:'אופנה',    section:'watch',watchScore:1,watchNote:'פשיטת רגל אפשרית'},
+  ENVB:{name:'Enveric Biosciences',   price:3.37,  change:-7.67, sector:'ביוטק',    section:'watch',watchScore:2,watchNote:'הון עצמי שלילי'},
+  OGEN:{name:'Oragenics',             price:0.66,  change:-6.65, sector:'ביוטק',    section:'watch',watchScore:1,watchNote:'מניית פרוטה'},
+  BAESY:{name:'BAE Systems',          price:116.05,change:-5.07, sector:'ביטחון',   section:'watch',watchScore:3,watchNote:'ירידה בתקציבי ביטחון'},
+  CETX:{name:'Cemtrex',               price:1.16,  change:-10.08,sector:'טכנולוגיה',section:'watch',watchScore:1,watchNote:'נפח נמוך'},
+};
+
+const SECTIONS={
+  myport: {label:'📁 שלי',    accent:'#a78bfa',rgb:'167,139,250'},
+  compare:{label:'📊 השוואה', accent:'#63b3ed',rgb:'99,179,237'},
+  watch:  {label:'👁 מעקב',  accent:'#f6ad55',rgb:'246,173,85'},
+  rockets:{label:'🚀 טסות',  accent:'#68d391',rgb:'104,211,145'},
+};
+
+const WATCH_GROUPS=[
+  {key:'buy', label:'💚 שווה לקנות',  color:'#68d391',rgb:'104,211,145',test:s=>s.watchScore>=7},
+  {key:'mid', label:'🟠 ממותן / המתן',color:'#f6ad55',rgb:'246,173,85', test:s=>s.watchScore>=4&&s.watchScore<7},
+  {key:'weak',label:'🔴 התרחק',       color:'#fc8181',rgb:'252,129,129',test:s=>s.watchScore<4},
+];
+
+// ── Stock Card ──
+function StockCard({stock,accent,rgb,onChart,delay}){
+  const pos=stock.change>=0;
+  const hasExt=stock.extPrice&&stock.extLabel;
+  return(
+    <div dir="rtl" style={{background:`rgba(${rgb},.03)`,border:`1px solid rgba(${rgb},.1)`,borderRadius:'12px',padding:'13px',cursor:'pointer',transition:'background .18s, transform .18s',animation:`fadeUp .4s ease ${delay||0}s both`}}
+      onMouseEnter={e=>{e.currentTarget.style.background=`rgba(${rgb},.09)`;e.currentTarget.style.transform='translateY(-2px)';}}
+      onMouseLeave={e=>{e.currentTarget.style.background=`rgba(${rgb},.03)`;e.currentTarget.style.transform='';}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'10px'}}>
+        <div style={{minWidth:0,flex:1}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'3px'}}>
+            <span style={{fontFamily:'monospace',fontSize:'14px',fontWeight:'700',color:accent}}>{stock.ticker}</span>
+            {stock.sector&&<span style={{fontSize:'9px',padding:'1px 6px',background:`rgba(${rgb},.12)`,borderRadius:'20px',color:'rgba(255,255,255,.38)'}}>{stock.sector}</span>}
+            {stock.isLive&&<span style={{fontSize:'8px',color:'#68d391',background:'rgba(104,211,145,.1)',padding:'1px 5px',borderRadius:'4px'}}>● LIVE</span>}
+          </div>
+          <div style={{fontSize:'11px',color:'rgba(255,255,255,.38)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{stock.name}</div>
+        </div>
+        <div style={{textAlign:'left',flexShrink:0,marginRight:'8px'}}>
+          <div style={{fontSize:'16px',fontWeight:'700',fontFamily:'monospace',color:'#f0f4f8'}}>${fmt(stock.price)}</div>
+          <div style={{fontSize:'12px',fontWeight:'700',color:pos?'#68d391':'#fc8181',fontFamily:'monospace'}}>{pos?'▲':'▼'}{Math.abs(stock.change).toFixed(2)}%</div>
+          {hasExt&&<div style={{fontSize:'9px',color:'rgba(255,255,255,.35)',marginTop:'2px',textAlign:'right'}}>🌙{stock.extLabel} <span style={{color:stock.extChange>=0?'#68d391':'#fc8181',fontFamily:'monospace'}}>{stock.extChange>=0?'▲':'▼'}{Math.abs(stock.extChange||0).toFixed(2)}%</span></div>}
+        </div>
+      </div>
+      <button onClick={()=>onChart(stock)} style={{width:'100%',padding:'8px',background:`rgba(${rgb},.09)`,border:`1px solid rgba(${rgb},.22)`,borderRadius:'8px',color:accent,fontSize:'12px',fontWeight:'600',cursor:'pointer',transition:'background .15s'}}
+        onMouseEnter={e=>e.currentTarget.style.background=`rgba(${rgb},.2)`}
+        onMouseLeave={e=>e.currentTarget.style.background=`rgba(${rgb},.09)`}>
+        📊 גרף + ניתוח AI ←
+      </button>
+    </div>
+  );
+}
+
+// ── Watch Card ──
+function WatchCard({stock,group,onChart,delay}){
+  const pos=stock.change>=0;
+  return(
+    <div dir="rtl" style={{background:`rgba(${group.rgb},.04)`,border:`1px solid rgba(${group.rgb},.18)`,borderRadius:'12px',padding:'13px',cursor:'pointer',transition:'background .18s, transform .18s',animation:`fadeUp .4s ease ${delay||0}s both`}}
+      onMouseEnter={e=>{e.currentTarget.style.background=`rgba(${group.rgb},.09)`;e.currentTarget.style.transform='translateY(-2px)';}}
+      onMouseLeave={e=>{e.currentTarget.style.background=`rgba(${group.rgb},.04)`;e.currentTarget.style.transform='';}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:'7px'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'2px'}}>
+            <span style={{fontFamily:'monospace',fontSize:'14px',fontWeight:'700',color:group.color}}>{stock.ticker}</span>
+            <span style={{fontSize:'9px',padding:'1px 6px',background:`rgba(${group.rgb},.14)`,borderRadius:'20px',color:'rgba(255,255,255,.4)'}}>{stock.sector}</span>
+            {stock.isLive&&<span style={{fontSize:'8px',color:'#68d391',background:'rgba(104,211,145,.1)',padding:'1px 5px',borderRadius:'4px'}}>● LIVE</span>}
+          </div>
+          <div style={{fontSize:'11px',color:'rgba(255,255,255,.38)',marginBottom:'6px'}}>{stock.name}</div>
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <div style={{height:'4px',width:'54px',background:'rgba(255,255,255,.07)',borderRadius:'4px',overflow:'hidden'}}>
+              <div style={{height:'100%',width:((stock.watchScore||0)/10*100)+'%',background:group.color,borderRadius:'4px'}}/>
+            </div>
+            <span style={{fontSize:'10px',color:group.color,fontWeight:'700'}}>{stock.watchScore}/10</span>
+          </div>
+        </div>
+        <div style={{textAlign:'left',flexShrink:0,marginRight:'8px'}}>
+          <div style={{fontSize:'15px',fontWeight:'700',fontFamily:'monospace',color:'#f0f4f8'}}>${fmt(stock.price)}</div>
+          <div style={{fontSize:'11px',fontWeight:'700',color:pos?'#68d391':'#fc8181',fontFamily:'monospace'}}>{pos?'▲':'▼'}{Math.abs(stock.change).toFixed(2)}%</div>
+        </div>
+      </div>
+      {stock.watchNote&&<div style={{fontSize:'11px',color:`rgba(${group.rgb},.8)`,background:`rgba(${group.rgb},.07)`,padding:'5px 9px',borderRadius:'7px',marginBottom:'8px'}}>💡 {stock.watchNote}</div>}
+      <button onClick={()=>onChart(stock)} style={{width:'100%',padding:'7px',background:`rgba(${group.rgb},.09)`,border:`1px solid rgba(${group.rgb},.22)`,borderRadius:'8px',color:group.color,fontSize:'12px',fontWeight:'600',cursor:'pointer',transition:'background .15s'}}
+        onMouseEnter={e=>e.currentTarget.style.background=`rgba(${group.rgb},.2)`}
+        onMouseLeave={e=>e.currentTarget.style.background=`rgba(${group.rgb},.09)`}>
+        📊 גרף + ניתוח AI ←
+      </button>
+    </div>
+  );
+}
+
+function WatchTab({stocks,onChart}){
+  return(
+    <div>
+      {WATCH_GROUPS.map(g=>{
+        const list=stocks.filter(g.test).sort((a,b)=>b.watchScore-a.watchScore);
+        if(!list.length)return null;
+        return(
+          <div key={g.key} style={{marginBottom:'24px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
+              <span style={{fontSize:'12px',color:g.color,fontWeight:'700',whiteSpace:'nowrap'}}>{g.label}</span>
+              <div style={{height:'1px',flex:1,background:`rgba(${g.rgb},.18)`}}/>
+              <span style={{fontSize:'10px',color:`rgba(${g.rgb},.7)`,background:`rgba(${g.rgb},.1)`,padding:'1px 9px',borderRadius:'20px'}}>{list.length}</span>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(255px,1fr))',gap:'10px'}}>
+              {list.map((s,i)=><WatchCard key={s.ticker} stock={s} group={g} onChart={onChart} delay={i*0.04}/>)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ══════════════════════════════
+// MAIN APP
+// ══════════════════════════════
+function App(){
+  const [tab,setTab]=useState('myport');
+  const [chartStock,setChartStock]=useState(null);
+  const [showPortfolio,setShowPortfolio]=useState(false);
+  const [search,setSearch]=useState('');
+  const [liveMap,setLiveMap]=useState({});
+  const [refreshing,setRefreshing]=useState(false);
+  const [countdown,setCountdown]=useState(60);
+  const [lastRefresh,setLastRefresh]=useState(null);
+  const sumTW=useTypewriter();
+  const [sumLoading,setSumLoading]=useState(false);
+
+  const getStock=useCallback(t=>{
+    const b=ALL_STOCKS[t],lv=liveMap[t];
+    return{ticker:t,name:b.name,sector:b.sector,section:b.section,watchScore:b.watchScore,watchNote:b.watchNote,
+      price:lv?lv.price:b.price,change:lv?lv.change:b.change,
+      extPrice:lv?lv.extPrice:null,extChange:lv?lv.extChange:null,extLabel:lv?lv.extLabel:null,isLive:!!lv};
+  },[liveMap]);
+
+  const refresh=useCallback(async()=>{
+    setRefreshing(true);
+    try{const map=await fetchAllPrices(Object.keys(ALL_STOCKS));if(Object.keys(map).length>0)setLiveMap(p=>({...p,...map}));}
+    catch{}
+    setLastRefresh(Date.now());setCountdown(60);setRefreshing(false);
+  },[]);
+
+  useEffect(()=>{refresh();},[]);
+  useEffect(()=>{const iv=setInterval(refresh,60000);return()=>clearInterval(iv);},[refresh]);
+  useEffect(()=>{const iv=setInterval(()=>setCountdown(c=>Math.max(0,c-1)),1000);return()=>clearInterval(iv);},[lastRefresh]);
+
+  const loadSummary=useCallback(async()=>{
+    if(sumLoading||sumTW.running)return;
+    setSumLoading(true);
+    const data=['SMX','PGY','QUBT','BYND','LUMN','MNDY'].map(t=>{const s=getStock(t);return `${t}: $${fmt(s.price)} (${s.change.toFixed(2)}%)`;}).join(', ');
+    try{sumTW.play(await callAI(`סיכום שוק קצר בעברית, 2 משפטים עד 45 מילים. נתונים: ${data}. היה ישיר ותובנתי.`));}
+    catch(e){sumTW.play('שגיאה: '+e.message);}
+    setSumLoading(false);
+  },[getStock]);
+
+  useEffect(()=>{if(lastRefresh)loadSummary();},[lastRefresh]);
+
+  const rockets=useMemo(()=>Object.keys(ALL_STOCKS).map(getStock).filter(s=>s.change>=10).sort((a,b)=>b.change-a.change),[getStock]);
+
+  const display=useMemo(()=>{
+    if(tab==='rockets')return rockets;
+    const q=search.trim().toUpperCase();
+    return Object.keys(ALL_STOCKS).filter(t=>{
+      if(ALL_STOCKS[t].section!==tab)return false;
+      if(!q)return true;
+      return t.includes(q)||ALL_STOCKS[t].name.toLowerCase().includes(search.toLowerCase());
+    }).map(getStock);
+  },[tab,search,getStock,rockets]);
+
+  const cur=SECTIONS[tab]||SECTIONS.myport;
+  const aiBusy=sumLoading||sumTW.running;
+
+  return(
+    <div dir="rtl" style={{minHeight:'100dvh',background:'#060b14',color:'#f0f4f8',fontFamily:"'Heebo',system-ui,sans-serif",padding:'14px 14px 50px',paddingTop:'calc(max(env(safe-area-inset-top,44px),44px) + 14px)'}}>
+      <div style={{maxWidth:'1060px',margin:'0 auto'}}>
+
+        {/* Top bar */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+          <h1 style={{fontFamily:'monospace',fontSize:'21px',fontWeight:'700'}}>Dani's <span style={{color:'#63b3ed'}}>Money</span></h1>
+          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+            <div onClick={refresh} style={{display:'flex',alignItems:'center',gap:'5px',background:'rgba(0,0,0,.35)',border:'1px solid rgba(255,255,255,.07)',borderRadius:'8px',padding:'6px 11px',cursor:'pointer'}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor='rgba(99,179,237,.3)'}
+              onMouseLeave={e=>e.currentTarget.style.borderColor='rgba(255,255,255,.07)'}>
+              {refreshing?<div style={{width:'8px',height:'8px',border:'2px solid rgba(99,179,237,.2)',borderTop:'2px solid #63b3ed',borderRadius:'50%',animation:'spin .8s linear infinite'}}/>:<div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#68d391',boxShadow:'0 0 6px rgba(104,211,145,.5)'}}/>}
+              <span style={{fontSize:'10px',color:'rgba(255,255,255,.32)',fontFamily:'monospace'}}>{refreshing?'...':countdown+'s'}</span>
+            </div>
+            <button onClick={()=>setShowPortfolio(true)} style={{background:'rgba(167,139,250,.13)',border:'1px solid rgba(167,139,250,.28)',borderRadius:'8px',color:'#a78bfa',padding:'7px 15px',fontSize:'13px',fontWeight:'600',cursor:'pointer',transition:'background .15s'}}
+              onMouseEnter={e=>e.currentTarget.style.background='rgba(167,139,250,.22)'}
+              onMouseLeave={e=>e.currentTarget.style.background='rgba(167,139,250,.13)'}>
+              💼 תיק
+            </button>
+            <button onClick={()=>window.doResetKey&&window.doResetKey()} style={{background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.1)',borderRadius:'8px',color:'rgba(255,255,255,.38)',padding:'7px 10px',fontSize:'14px',cursor:'pointer',transition:'background .15s'}}
+              onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.1)'}
+              onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,.05)'}>⚙️</button>
+          </div>
+        </div>
+
+        {/* AI Summary */}
+        <div style={{background:'linear-gradient(135deg,rgba(99,179,237,.06),rgba(99,179,237,.02))',border:'1px solid rgba(99,179,237,.15)',borderRadius:'10px',padding:'11px 14px',marginBottom:'12px',minHeight:'42px',display:'flex',alignItems:'center',gap:'10px'}}>
+          <div style={{width:'7px',height:'7px',borderRadius:'50%',background:'#63b3ed',flexShrink:0,animation:aiBusy?'pulse 1.2s infinite':'none'}}/>
+          <div style={{fontSize:'12px',lineHeight:'1.65',color:'rgba(255,255,255,.62)',flex:1,textAlign:'right',whiteSpace:'pre-wrap'}}>
+            {aiBusy&&!sumTW.text&&<span style={{color:'rgba(255,255,255,.2)',fontStyle:'italic'}}>טוען סיכום שוק...</span>}
+            {sumTW.text}
+            {sumTW.running&&<span style={{display:'inline-block',width:'2px',height:'13px',background:'#63b3ed',marginRight:'2px',verticalAlign:'middle',animation:'blink .7s step-end infinite'}}/>}
+          </div>
+          {!aiBusy&&<button onClick={loadSummary} style={{background:'none',border:'none',color:'rgba(99,179,237,.4)',fontSize:'15px',cursor:'pointer',padding:'2px'}}
+            onMouseEnter={e=>e.currentTarget.style.color='rgba(99,179,237,.8)'}
+            onMouseLeave={e=>e.currentTarget.style.color='rgba(99,179,237,.4)'}>🔄</button>}
+        </div>
+
+        {/* Search */}
+        {tab!=='rockets'&&<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 חיפוש מניה..."
+          style={{width:'100%',background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.09)',borderRadius:'9px',padding:'9px 13px',color:'#f0f4f8',fontSize:'13px',marginBottom:'12px',transition:'border-color .2s'}}
+          onFocus={e=>e.target.style.borderColor='rgba(99,179,237,.3)'}
+          onBlur={e=>e.target.style.borderColor='rgba(255,255,255,.09)'}/>}
+
+        {/* Tabs */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'5px',marginBottom:'16px'}}>
+          {Object.entries(SECTIONS).map(([k,s])=>(
+            <button key={k} onClick={()=>{setTab(k);setSearch('');}} style={{padding:'9px 4px',borderRadius:'9px',fontSize:'12px',fontWeight:tab===k?'700':'400',transition:'all .15s',position:'relative',background:tab===k?`rgba(${s.rgb},.18)`:'rgba(255,255,255,.03)',border:tab===k?`1px solid rgba(${s.rgb},.45)`:'1px solid rgba(255,255,255,.07)',color:tab===k?s.accent:'rgba(255,255,255,.38)',cursor:'pointer'}}>
+              {s.label}
+              {k==='rockets'&&rockets.length>0&&<span style={{position:'absolute',top:'-8px',right:'-5px',background:'#fc8181',color:'#fff',borderRadius:'10px',fontSize:'9px',padding:'1px 6px',fontWeight:'800',boxShadow:'0 2px 6px rgba(252,129,129,.4)'}}>{rockets.length}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Rockets banner */}
+        {tab==='rockets'&&<div style={{background:'rgba(104,211,145,.06)',border:'1px solid rgba(104,211,145,.2)',borderRadius:'11px',padding:'13px 16px',marginBottom:'16px',display:'flex',alignItems:'center',gap:'14px'}}>
+          <span style={{fontSize:'28px',animation:'bounce 1.6s ease-in-out infinite',display:'block',flexShrink:0}}>🚀</span>
+          <div>
+            <div style={{fontSize:'13px',fontWeight:'700',color:'#68d391',marginBottom:'3px'}}>מניות שטסות מעל 10%</div>
+            <div style={{fontSize:'11px',color:'rgba(255,255,255,.38)'}}>{rockets.length>0?`${rockets.length} מניות · רענון בעוד ${countdown}s`:`אין כרגע · רענון בעוד ${countdown}s`}</div>
+          </div>
+        </div>}
+
+        {/* Section header */}
+        {tab!=='rockets'&&tab!=='watch'&&<div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
+          <span style={{fontSize:'11px',color:cur.accent,fontWeight:'700',whiteSpace:'nowrap'}}>{cur.label}</span>
+          <div style={{height:'1px',flex:1,background:`rgba(${cur.rgb},.14)`}}/>
+        </div>}
+
+        {/* Content */}
+        {tab==='watch'
+          ?<WatchTab stocks={display} onChart={setChartStock}/>
+          :display.length>0
+            ?<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(255px,1fr))',gap:'10px'}}>
+              {display.map((s,i)=><StockCard key={s.ticker} stock={s} accent={cur.accent} rgb={cur.rgb} onChart={setChartStock} delay={i*0.04}/>)}
+            </div>
+            :<div style={{textAlign:'center',padding:'60px 20px',animation:'fadeIn .4s ease'}}>
+              <div style={{fontSize:'40px',marginBottom:'12px'}}>{tab==='rockets'?'😴':'🔍'}</div>
+              <div style={{color:'rgba(255,255,255,.22)',fontSize:'13px'}}>{tab==='rockets'?`אין מניות מעל 10% · רענון בעוד ${countdown}s`:'לא נמצאו תוצאות'}</div>
+            </div>
+        }
+
+        <div style={{textAlign:'center',fontSize:'10px',color:'rgba(255,255,255,.1)',marginTop:'28px'}}>Dani's Money · למטרות מידע בלבד · אין ייעוץ פיננסי</div>
+      </div>
+
+      {chartStock&&<ChartPanel stock={chartStock} liveMap={liveMap} onClose={()=>setChartStock(null)}/>}
+      {showPortfolio&&<PortfolioPanel liveMap={liveMap} allStocks={ALL_STOCKS} onClose={()=>setShowPortfolio(false)}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(React.createElement(App));
+</script>
+
+</body>
+</html>
