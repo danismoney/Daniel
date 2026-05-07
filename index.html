@@ -1,0 +1,1690 @@
+<!DOCTYPE html>
+
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dani's Money 💰</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg2: #0f1218;
+    --bg3: #141820;
+    --card: #161b24;
+    --card2: #1c2333;
+    --border: #242d3d;
+    --border2: #2d3a50;
+    --text: #e8edf5;
+    --text2: #8896aa;
+    --text3: #5a6a7e;
+    --green: #00e676;
+    --green2: #1de9b6;
+    --red: #ff5252;
+    --red2: #ff8a80;
+    --blue: #448aff;
+    --blue2: #82b1ff;
+    --gold: #ffd740;
+    --gold2: #ffe57f;
+    --purple: #ea80fc;
+    --orange: #ff9100;
+    --cyan: #18ffff;
+    --accent: #00e5ff;
+    --glow-green: 0 0 20px rgba(0,230,118,0.3);
+    --glow-red: 0 0 20px rgba(255,82,82,0.3);
+    --glow-blue: 0 0 20px rgba(68,138,255,0.3);
+    --glow-gold: 0 0 20px rgba(255,215,64,0.35);
+    --radius: 12px;
+    --radius2: 8px;
+    --font: 'Heebo', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+- { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+font-family: var(–font);
+background: var(–bg);
+color: var(–text);
+min-height: 100vh;
+overflow-x: hidden;
+}
+
+/* Background grid effect */
+body::before {
+content: ‘’;
+position: fixed;
+inset: 0;
+background-image:
+linear-gradient(rgba(68,138,255,0.03) 1px, transparent 1px),
+linear-gradient(90deg, rgba(68,138,255,0.03) 1px, transparent 1px);
+background-size: 40px 40px;
+pointer-events: none;
+z-index: 0;
+}
+
+/* ═══════ HEADER ═══════ */
+header {
+position: sticky;
+top: 0;
+z-index: 100;
+background: rgba(10,12,16,0.92);
+backdrop-filter: blur(20px);
+border-bottom: 1px solid var(–border);
+padding: 0 24px;
+height: 64px;
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+
+.logo {
+display: flex;
+align-items: center;
+gap: 10px;
+font-size: 22px;
+font-weight: 900;
+letter-spacing: -0.5px;
+color: var(–text);
+}
+
+.logo-icon {
+width: 36px;
+height: 36px;
+background: linear-gradient(135deg, var(–gold), var(–orange));
+border-radius: 10px;
+display: flex;
+align-items: center;
+justify-content: center;
+font-size: 18px;
+box-shadow: var(–glow-gold);
+}
+
+.header-center {
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.market-pill {
+display: flex;
+align-items: center;
+gap: 6px;
+background: var(–card);
+border: 1px solid var(–border);
+border-radius: 20px;
+padding: 5px 14px;
+font-size: 12px;
+font-weight: 500;
+color: var(–text2);
+}
+
+.market-pill .dot {
+width: 7px;
+height: 7px;
+border-radius: 50%;
+background: var(–green);
+box-shadow: 0 0 8px var(–green);
+animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+0%,100% { opacity: 1; }
+50% { opacity: 0.4; }
+}
+
+.header-right {
+display: flex;
+align-items: center;
+gap: 12px;
+}
+
+.refresh-btn {
+background: transparent;
+border: 1px solid var(–border2);
+color: var(–text2);
+border-radius: var(–radius2);
+padding: 7px 14px;
+font-family: var(–font);
+font-size: 13px;
+cursor: pointer;
+display: flex;
+align-items: center;
+gap: 6px;
+transition: all 0.2s;
+}
+.refresh-btn:hover {
+border-color: var(–accent);
+color: var(–accent);
+box-shadow: 0 0 12px rgba(0,229,255,0.15);
+}
+.refresh-btn.spinning .spin-icon { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.countdown {
+font-family: var(–mono);
+font-size: 12px;
+color: var(–text3);
+min-width: 28px;
+text-align: center;
+}
+
+/* ═══════ LAYOUT ═══════ */
+.main-layout {
+position: relative;
+z-index: 1;
+display: grid;
+grid-template-columns: 1fr 380px;
+grid-template-rows: auto auto 1fr;
+gap: 20px;
+padding: 20px 24px;
+max-width: 1800px;
+margin: 0 auto;
+}
+
+/* ═══════ SECTION TITLES ═══════ */
+.section-title {
+font-size: 11px;
+font-weight: 700;
+letter-spacing: 1.5px;
+text-transform: uppercase;
+color: var(–text3);
+margin-bottom: 12px;
+display: flex;
+align-items: center;
+gap: 8px;
+}
+.section-title::after {
+content: ‘’;
+flex: 1;
+height: 1px;
+background: var(–border);
+}
+
+/* ═══════ PORTFOLIO SUMMARY ═══════ */
+.portfolio-summary {
+grid-column: 1 / -1;
+display: grid;
+grid-template-columns: repeat(5, 1fr);
+gap: 12px;
+}
+
+.summary-card {
+background: var(–card);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+padding: 16px 20px;
+position: relative;
+overflow: hidden;
+transition: border-color 0.2s;
+}
+.summary-card:hover { border-color: var(–border2); }
+.summary-card::before {
+content: ‘’;
+position: absolute;
+top: 0; left: 0; right: 0;
+height: 2px;
+background: var(–accent-color, var(–blue));
+opacity: 0.7;
+}
+
+.summary-label {
+font-size: 11px;
+font-weight: 600;
+letter-spacing: 0.8px;
+text-transform: uppercase;
+color: var(–text3);
+margin-bottom: 8px;
+}
+.summary-value {
+font-family: var(–mono);
+font-size: 22px;
+font-weight: 600;
+color: var(–text);
+line-height: 1;
+}
+.summary-sub {
+font-size: 12px;
+color: var(–text3);
+margin-top: 4px;
+}
+
+/* ═══════ STOCKS GRID ═══════ */
+.stocks-main {
+grid-column: 1;
+grid-row: 2 / 4;
+min-height: 0;
+}
+
+/* ═══════ TABS ═══════ */
+.tabs {
+display: flex;
+gap: 4px;
+margin-bottom: 16px;
+background: var(–card);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+padding: 4px;
+}
+.tab-btn {
+flex: 1;
+background: transparent;
+border: none;
+color: var(–text3);
+font-family: var(–font);
+font-size: 13px;
+font-weight: 500;
+padding: 8px 12px;
+border-radius: var(–radius2);
+cursor: pointer;
+transition: all 0.2s;
+white-space: nowrap;
+}
+.tab-btn:hover { color: var(–text2); background: var(–bg3); }
+.tab-btn.active {
+background: var(–bg3);
+color: var(–text);
+border: 1px solid var(–border2);
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ═══════ STOCK CARDS GRID ═══════ */
+.stocks-grid {
+display: grid;
+grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+gap: 10px;
+}
+
+.stock-card {
+background: var(–card);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+padding: 14px 16px;
+cursor: pointer;
+transition: all 0.2s;
+position: relative;
+overflow: hidden;
+}
+.stock-card:hover {
+border-color: var(–border2);
+transform: translateY(-1px);
+box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.stock-card.selected {
+border-color: var(–accent);
+box-shadow: 0 0 0 1px var(–accent), var(–glow-blue);
+}
+.stock-card.rocket {
+border-color: var(–gold) !important;
+box-shadow: 0 0 0 1px var(–gold), var(–glow-gold) !important;
+animation: rocketGlow 2s ease-in-out infinite;
+}
+@keyframes rocketGlow {
+0%,100% { box-shadow: 0 0 0 1px var(–gold), var(–glow-gold); }
+50% { box-shadow: 0 0 0 1px var(–gold), 0 0 30px rgba(255,215,64,0.5); }
+}
+
+.stock-card-glow {
+position: absolute;
+inset: 0;
+opacity: 0.04;
+pointer-events: none;
+transition: opacity 0.3s;
+}
+.stock-card:hover .stock-card-glow { opacity: 0.08; }
+.card-green .stock-card-glow { background: radial-gradient(circle at 50% 100%, var(–green), transparent 70%); }
+.card-red .stock-card-glow { background: radial-gradient(circle at 50% 100%, var(–red), transparent 70%); }
+
+.stock-header {
+display: flex;
+align-items: flex-start;
+justify-content: space-between;
+margin-bottom: 10px;
+}
+
+.stock-ticker {
+font-family: var(–mono);
+font-size: 16px;
+font-weight: 600;
+color: var(–text);
+line-height: 1;
+}
+.stock-name {
+font-size: 10px;
+color: var(–text3);
+margin-top: 3px;
+max-width: 110px;
+overflow: hidden;
+text-overflow: ellipsis;
+white-space: nowrap;
+}
+
+.stock-badge {
+font-size: 9px;
+font-weight: 700;
+padding: 2px 7px;
+border-radius: 4px;
+letter-spacing: 0.5px;
+text-transform: uppercase;
+}
+.badge-mine { background: rgba(68,138,255,0.15); color: var(–blue2); border: 1px solid rgba(68,138,255,0.3); }
+.badge-watch { background: rgba(138,80,255,0.12); color: var(–purple); border: 1px solid rgba(138,80,255,0.25); }
+.badge-compare { background: rgba(255,145,0,0.12); color: var(–orange); border: 1px solid rgba(255,145,0,0.25); }
+.badge-rocket { background: rgba(255,215,64,0.15); color: var(–gold); border: 1px solid rgba(255,215,64,0.35); animation: pulse 1.5s infinite; }
+
+.stock-price {
+font-family: var(–mono);
+font-size: 22px;
+font-weight: 600;
+line-height: 1;
+margin-bottom: 6px;
+}
+.card-green .stock-price { color: var(–green); }
+.card-red .stock-price { color: var(–red); }
+.card-neutral .stock-price { color: var(–text); }
+
+.stock-change {
+display: flex;
+align-items: center;
+gap: 6px;
+font-family: var(–mono);
+font-size: 13px;
+font-weight: 500;
+}
+.change-pos { color: var(–green); }
+.change-neg { color: var(–red); }
+.change-neutral { color: var(–text3); }
+
+.stock-ext {
+margin-top: 8px;
+padding-top: 8px;
+border-top: 1px solid var(–border);
+display: flex;
+flex-direction: column;
+gap: 3px;
+}
+.ext-row {
+display: flex;
+justify-content: space-between;
+align-items: center;
+font-size: 10px;
+}
+.ext-label { color: var(–text3); }
+.ext-val { font-family: var(–mono); font-weight: 500; }
+.ext-val.pos { color: var(–green2); }
+.ext-val.neg { color: var(–red2); }
+.ext-val.neutral { color: var(–text2); }
+
+/* Loading skeleton */
+.skeleton {
+background: linear-gradient(90deg, var(–card) 25%, var(–card2) 50%, var(–card) 75%);
+background-size: 200% 100%;
+animation: shimmer 1.5s infinite;
+border-radius: 4px;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ═══════ RIGHT PANEL ═══════ */
+.right-panel {
+grid-column: 2;
+grid-row: 2 / 4;
+display: flex;
+flex-direction: column;
+gap: 16px;
+min-height: 0;
+}
+
+/* ═══════ CHART PANEL ═══════ */
+.chart-panel {
+background: var(–card);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+padding: 20px;
+flex-shrink: 0;
+}
+
+.chart-header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+margin-bottom: 16px;
+}
+
+.chart-ticker-display {
+display: flex;
+align-items: baseline;
+gap: 10px;
+}
+.chart-ticker-name {
+font-family: var(–mono);
+font-size: 20px;
+font-weight: 600;
+}
+.chart-ticker-sub { font-size: 12px; color: var(–text3); }
+
+.chart-price-display {
+text-align: left;
+}
+.chart-price {
+font-family: var(–mono);
+font-size: 24px;
+font-weight: 600;
+}
+.chart-change-pill {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+font-family: var(–mono);
+font-size: 12px;
+font-weight: 600;
+padding: 3px 10px;
+border-radius: 20px;
+margin-top: 2px;
+}
+.pill-green { background: rgba(0,230,118,0.12); color: var(–green); border: 1px solid rgba(0,230,118,0.25); }
+.pill-red { background: rgba(255,82,82,0.12); color: var(–red); border: 1px solid rgba(255,82,82,0.25); }
+.pill-neutral { background: var(–bg3); color: var(–text3); border: 1px solid var(–border); }
+
+.chart-container {
+position: relative;
+height: 180px;
+}
+
+/* Extended hours display in chart */
+.ext-hours-bar {
+display: grid;
+grid-template-columns: 1fr 1fr;
+gap: 8px;
+margin-top: 12px;
+}
+.ext-box {
+background: var(–bg3);
+border: 1px solid var(–border);
+border-radius: var(–radius2);
+padding: 8px 10px;
+}
+.ext-box-label {
+font-size: 9px;
+font-weight: 700;
+letter-spacing: 1px;
+text-transform: uppercase;
+color: var(–text3);
+margin-bottom: 4px;
+}
+.ext-box-val {
+font-family: var(–mono);
+font-size: 14px;
+font-weight: 600;
+}
+.ext-box-change { font-size: 11px; font-family: var(–mono); }
+
+/* ═══════ NEWS PANEL ═══════ */
+.news-panel {
+background: var(–card);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+flex: 1;
+min-height: 0;
+overflow: hidden;
+display: flex;
+flex-direction: column;
+}
+
+.news-header {
+padding: 14px 16px;
+border-bottom: 1px solid var(–border);
+display: flex;
+align-items: center;
+justify-content: space-between;
+flex-shrink: 0;
+}
+.news-title {
+font-size: 13px;
+font-weight: 700;
+color: var(–text2);
+display: flex;
+align-items: center;
+gap: 6px;
+}
+
+.news-list {
+overflow-y: auto;
+flex: 1;
+padding: 8px;
+scrollbar-width: thin;
+scrollbar-color: var(–border2) transparent;
+}
+.news-list::-webkit-scrollbar { width: 4px; }
+.news-list::-webkit-scrollbar-track { background: transparent; }
+.news-list::-webkit-scrollbar-thumb { background: var(–border2); border-radius: 2px; }
+
+.news-item {
+padding: 10px 10px;
+border-radius: var(–radius2);
+margin-bottom: 4px;
+cursor: pointer;
+transition: background 0.15s;
+border: 1px solid transparent;
+}
+.news-item:hover { background: var(–bg3); border-color: var(–border); }
+
+.news-source-row {
+display: flex;
+align-items: center;
+gap: 6px;
+margin-bottom: 5px;
+}
+.news-source {
+font-size: 9px;
+font-weight: 700;
+letter-spacing: 0.8px;
+text-transform: uppercase;
+color: var(–accent);
+background: rgba(0,229,255,0.08);
+padding: 2px 6px;
+border-radius: 3px;
+}
+.news-time { font-size: 10px; color: var(–text3); }
+
+.news-headline {
+font-size: 12px;
+font-weight: 500;
+color: var(–text2);
+line-height: 1.5;
+display: -webkit-box;
+-webkit-line-clamp: 2;
+-webkit-box-orient: vertical;
+overflow: hidden;
+}
+
+/* ═══════ AI PANEL ═══════ */
+.ai-panel {
+grid-column: 1 / -1;
+background: var(–card);
+border: 1px solid var(–border);
+border-radius: var(–radius);
+overflow: hidden;
+}
+
+.ai-header {
+padding: 14px 20px;
+border-bottom: 1px solid var(–border);
+display: flex;
+align-items: center;
+justify-content: space-between;
+}
+
+.ai-title {
+font-size: 13px;
+font-weight: 700;
+color: var(–text2);
+display: flex;
+align-items: center;
+gap: 8px;
+}
+
+.ai-glow { color: var(–purple); filter: drop-shadow(0 0 6px var(–purple)); }
+
+.ai-body {
+padding: 16px 20px;
+display: flex;
+gap: 12px;
+align-items: flex-start;
+}
+
+.ai-input-wrap {
+flex: 1;
+display: flex;
+gap: 10px;
+align-items: center;
+}
+
+.ai-input {
+flex: 1;
+background: var(–bg3);
+border: 1px solid var(–border2);
+color: var(–text);
+font-family: var(–font);
+font-size: 13px;
+border-radius: var(–radius2);
+padding: 10px 14px;
+outline: none;
+transition: border-color 0.2s;
+}
+.ai-input:focus { border-color: var(–accent); box-shadow: 0 0 0 2px rgba(0,229,255,0.08); }
+.ai-input::placeholder { color: var(–text3); }
+
+.ai-btn {
+background: linear-gradient(135deg, #6c3dea, #9c40f0);
+border: none;
+color: white;
+font-family: var(–font);
+font-size: 13px;
+font-weight: 600;
+padding: 10px 20px;
+border-radius: var(–radius2);
+cursor: pointer;
+transition: all 0.2s;
+white-space: nowrap;
+box-shadow: 0 4px 12px rgba(108,61,234,0.3);
+}
+.ai-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(108,61,234,0.4); }
+.ai-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.ai-response {
+background: var(–bg3);
+border: 1px solid var(–border);
+border-radius: var(–radius2);
+padding: 12px 16px;
+font-size: 13px;
+color: var(–text2);
+line-height: 1.7;
+min-height: 50px;
+position: relative;
+}
+
+.ai-ticker-tag {
+display: inline-block;
+font-family: var(–mono);
+font-size: 11px;
+font-weight: 600;
+color: var(–purple);
+background: rgba(234,128,252,0.1);
+border: 1px solid rgba(234,128,252,0.2);
+border-radius: 4px;
+padding: 1px 6px;
+margin: 0 2px;
+}
+
+.typing-dot {
+display: inline-block;
+width: 6px;
+height: 6px;
+background: var(–purple);
+border-radius: 50%;
+animation: typingBounce 1s infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+@keyframes typingBounce {
+0%,80%,100% { transform: translateY(0); opacity: 0.4; }
+40% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ═══════ ALERTS / ROCKETS ═══════ */
+.rockets-bar {
+grid-column: 1 / -1;
+background: rgba(255,215,64,0.06);
+border: 1px solid rgba(255,215,64,0.2);
+border-radius: var(–radius);
+padding: 12px 20px;
+display: flex;
+align-items: center;
+gap: 12px;
+overflow: hidden;
+display: none;
+}
+.rockets-bar.visible { display: flex; }
+
+.rockets-label {
+font-size: 12px;
+font-weight: 700;
+color: var(–gold);
+letter-spacing: 0.5px;
+white-space: nowrap;
+flex-shrink: 0;
+}
+
+.rockets-scroll {
+display: flex;
+gap: 8px;
+overflow-x: auto;
+scrollbar-width: none;
+flex: 1;
+}
+.rockets-scroll::-webkit-scrollbar { display: none; }
+
+.rocket-pill {
+display: flex;
+align-items: center;
+gap: 6px;
+background: rgba(255,215,64,0.1);
+border: 1px solid rgba(255,215,64,0.3);
+border-radius: 20px;
+padding: 4px 14px;
+white-space: nowrap;
+font-family: var(–mono);
+font-size: 12px;
+cursor: pointer;
+transition: all 0.15s;
+animation: fadeInRight 0.3s ease;
+}
+.rocket-pill:hover { background: rgba(255,215,64,0.18); }
+@keyframes fadeInRight { from { opacity: 0; transform: translateX(20px); } }
+
+.rocket-pill .r-ticker { font-weight: 700; color: var(–gold); }
+.rocket-pill .r-change { color: var(–green); }
+
+/* ═══════ SCROLL AREA ═══════ */
+.scroll-stocks {
+max-height: calc(100vh - 340px);
+overflow-y: auto;
+scrollbar-width: thin;
+scrollbar-color: var(–border2) transparent;
+}
+.scroll-stocks::-webkit-scrollbar { width: 4px; }
+.scroll-stocks::-webkit-scrollbar-thumb { background: var(–border2); border-radius: 2px; }
+
+/* ═══════ EMPTY STATE ═══════ */
+.empty-news {
+padding: 40px 20px;
+text-align: center;
+color: var(–text3);
+font-size: 13px;
+}
+
+/* ═══════ ERROR TOAST ═══════ */
+.toast-container {
+position: fixed;
+bottom: 24px;
+left: 24px;
+z-index: 1000;
+display: flex;
+flex-direction: column;
+gap: 8px;
+pointer-events: none;
+}
+.toast {
+background: var(–card2);
+border: 1px solid var(–border2);
+border-radius: var(–radius2);
+padding: 10px 16px;
+font-size: 12px;
+color: var(–text2);
+max-width: 320px;
+animation: slideUp 0.3s ease;
+pointer-events: auto;
+}
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } }
+.toast.error { border-color: rgba(255,82,82,0.4); color: var(–red2); }
+
+/* ═══════ RESPONSIVE ═══════ */
+@media (max-width: 1200px) {
+.main-layout { grid-template-columns: 1fr; }
+.stocks-main { grid-column: 1; grid-row: auto; }
+.right-panel { grid-column: 1; grid-row: auto; flex-direction: row; }
+.chart-panel { flex: 1; }
+.news-panel { flex: 1; max-height: 400px; }
+.portfolio-summary { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+.main-layout { padding: 12px; gap: 12px; }
+.portfolio-summary { grid-template-columns: repeat(2, 1fr); }
+.right-panel { flex-direction: column; }
+header { padding: 0 16px; }
+}
+
+/* ═══════ MISC ═══════ */
+.tag-vol {
+font-size: 9px;
+color: var(–text3);
+font-family: var(–mono);
+margin-top: 2px;
+}
+
+.no-data {
+color: var(–text3);
+font-size: 13px;
+text-align: center;
+padding: 40px 20px;
+width: 100%;
+}
+</style>
+
+</head>
+<body>
+
+<!-- HEADER -->
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">💰</div>
+    Dani's Money
+  </div>
+
+  <div class="header-center">
+    <div class="market-pill" id="marketStatusPill">
+      <span class="dot" id="marketDot"></span>
+      <span id="marketStatusText">טוען...</span>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <span class="countdown" id="countdownDisplay">15</span>
+    <button class="refresh-btn" onclick="manualRefresh()" id="refreshBtn">
+      <span class="spin-icon">↻</span> רענן
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+
+<div class="main-layout">
+
+  <!-- ROCKETS BAR -->
+
+  <div class="rockets-bar" id="rocketsBar">
+    <span class="rockets-label">🚀 טסות היום</span>
+    <div class="rockets-scroll" id="rocketsList"></div>
+  </div>
+
+  <!-- PORTFOLIO SUMMARY -->
+
+  <div class="portfolio-summary">
+    <div class="summary-card" style="--accent-color: var(--gold)">
+      <div class="summary-label">תיק שלי</div>
+      <div class="summary-value" id="sumPortfolioCount">—</div>
+      <div class="summary-sub" id="sumPortfolioUp">מניות עולות</div>
+    </div>
+    <div class="summary-card" style="--accent-color: var(--green)">
+      <div class="summary-label">עולות</div>
+      <div class="summary-value" id="sumUp" style="color:var(--green)">—</div>
+      <div class="summary-sub" id="sumUpPct">מכלל המניות</div>
+    </div>
+    <div class="summary-card" style="--accent-color: var(--red)">
+      <div class="summary-label">יורדות</div>
+      <div class="summary-value" id="sumDown" style="color:var(--red)">—</div>
+      <div class="summary-sub" id="sumDownPct">מכלל המניות</div>
+    </div>
+    <div class="summary-card" style="--accent-color: var(--purple)">
+      <div class="summary-label">🚀 טסות (≥10%)</div>
+      <div class="summary-value" id="sumRockets" style="color:var(--gold)">—</div>
+      <div class="summary-sub">שינוי יומי</div>
+    </div>
+    <div class="summary-card" style="--accent-color: var(--cyan)">
+      <div class="summary-label">עדכון אחרון</div>
+      <div class="summary-value" id="sumLastUpdate" style="font-size:16px">—</div>
+      <div class="summary-sub">רענון כל 15 שניות</div>
+    </div>
+  </div>
+
+  <!-- LEFT: STOCKS -->
+
+  <div class="stocks-main">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('mine', this)">💼 שלי</button>
+      <button class="tab-btn" onclick="switchTab('compare', this)">📊 השוואה</button>
+      <button class="tab-btn" onclick="switchTab('watch', this)">👁 מעקב</button>
+      <button class="tab-btn" onclick="switchTab('all', this)">🌐 הכל</button>
+    </div>
+
+```
+<div class="tab-panel active scroll-stocks" id="panel-mine">
+  <div class="section-title">תיק המניות שלי</div>
+  <div class="stocks-grid" id="grid-mine"></div>
+</div>
+<div class="tab-panel scroll-stocks" id="panel-compare">
+  <div class="section-title">מניות להשוואה</div>
+  <div class="stocks-grid" id="grid-compare"></div>
+</div>
+<div class="tab-panel scroll-stocks" id="panel-watch">
+  <div class="section-title">רשימת מעקב</div>
+  <div class="stocks-grid" id="grid-watch"></div>
+</div>
+<div class="tab-panel scroll-stocks" id="panel-all">
+  <div class="section-title">כל המניות</div>
+  <div class="stocks-grid" id="grid-all"></div>
+</div>
+```
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+
+  <div class="right-panel">
+
+```
+<!-- CHART -->
+<div class="chart-panel">
+  <div class="chart-header">
+    <div class="chart-ticker-display">
+      <span class="chart-ticker-name" id="chartTicker">SMX</span>
+      <span class="chart-ticker-sub" id="chartTickerName">בחר מניה</span>
+    </div>
+    <div class="chart-price-display">
+      <div class="chart-price" id="chartPrice">—</div>
+      <div id="chartChangePill" class="chart-change-pill pill-neutral">—</div>
+    </div>
+  </div>
+  <div class="chart-container">
+    <canvas id="priceChart"></canvas>
+  </div>
+  <div class="ext-hours-bar" id="extHoursBar" style="display:none">
+    <div class="ext-box">
+      <div class="ext-box-label">פרה-מרקט</div>
+      <div class="ext-box-val" id="preMarketVal">—</div>
+      <div class="ext-box-change" id="preMarketChg"></div>
+    </div>
+    <div class="ext-box">
+      <div class="ext-box-label">אפטר-מרקט</div>
+      <div class="ext-box-val" id="postMarketVal">—</div>
+      <div class="ext-box-change" id="postMarketChg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- NEWS -->
+<div class="news-panel">
+  <div class="news-header">
+    <div class="news-title">
+      📰 <span id="newsTitle">חדשות — SMX</span>
+    </div>
+    <button class="refresh-btn" style="padding:5px 10px;font-size:11px" onclick="loadNews(selectedTicker)">↻</button>
+  </div>
+  <div class="news-list" id="newsList">
+    <div class="empty-news">בחר מניה לצפייה בחדשות</div>
+  </div>
+</div>
+```
+
+  </div>
+
+  <!-- AI PANEL -->
+
+  <div class="ai-panel">
+    <div class="ai-header">
+      <div class="ai-title">
+        <span class="ai-glow">✦</span>
+        ניתוח AI — Claude
+        <span style="font-size:10px;color:var(--text3);font-weight:400">claude-haiku-4-5</span>
+      </div>
+      <div style="font-size:11px;color:var(--text3)">שאל שאלה על המניה הנבחרת</div>
+    </div>
+    <div class="ai-body">
+      <div class="ai-input-wrap">
+        <input class="ai-input" id="aiInput" type="text"
+          placeholder="לדוגמה: מה הסיכוי ש-SMX תעלה השבוע? נתח לי את המניה..."
+          onkeydown="if(event.key==='Enter')askAI()">
+        <button class="ai-btn" onclick="askAI()" id="aiBtn">שאל ✦</button>
+      </div>
+    </div>
+    <div id="aiResponse" class="ai-response" style="margin:0 20px 16px;display:none"></div>
+  </div>
+
+</div>
+
+<!-- TOAST CONTAINER -->
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+// ══════════════════════════════════════════════
+//  CONFIGURATION
+// ══════════════════════════════════════════════
+const WORKER_URL = 'https://daniworker.danironen123.workers.dev';
+const REFRESH_INTERVAL = 15; // seconds
+
+const STOCKS = {
+  mine:    ['SMX','PGY','QUBT','BYND','LUMN','MNDY'],
+  compare: ['TSLA','LI','AAPL','GOOG','NVDA','AMZN','MSFT','META','BX'],
+  watch:   ['PLTR','RKLB','IONQ','RIVN','NIO','SOFI','OPEN','HOOD','COIN',
+            'MSTR','SMCI','CLOV','SPCE','NKLA','WKHS','MULN','HYLN','GOEV',
+            'BLNK','CHPT']
+};
+
+const STOCK_NAMES = {
+  SMX:'SolarMax Energy',PGY:'Pagaya Technologies',QUBT:'Quantum Computing',
+  BYND:'Beyond Meat',LUMN:'Lumen Technologies',MNDY:'Monday.com',
+  TSLA:'Tesla',LI:'Li Auto',AAPL:'Apple',GOOG:'Alphabet',NVDA:'NVIDIA',
+  AMZN:'Amazon',MSFT:'Microsoft',META:'Meta',BX:'Blackstone',
+  PLTR:'Palantir',RKLB:'Rocket Lab',IONQ:'IonQ',RIVN:'Rivian',NIO:'Nio',
+  SOFI:'SoFi',OPEN:'Opendoor',HOOD:'Robinhood',COIN:'Coinbase',
+  MSTR:'MicroStrategy',SMCI:'Super Micro',CLOV:'Clover Health',
+  SPCE:'Virgin Galactic',NKLA:'Nikola',WKHS:'Workhorse',MULN:'Mullen',
+  HYLN:'Hyliion',GOEV:'Canoo',BLNK:'Blink Charging',CHPT:'ChargePoint'
+};
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+let stockData = {};          // ticker → data
+let selectedTicker = 'SMX';
+let priceHistory = {};       // ticker → [prices]
+let priceChart = null;
+let refreshTimer = null;
+let countdown = REFRESH_INTERVAL;
+let currentTab = 'mine';
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  renderSkeletons();
+  updateMarketStatus();
+  fetchAllStocks();
+  loadNews(selectedTicker);
+  startCountdown();
+  setInterval(updateMarketStatus, 60000);
+});
+
+// ══════════════════════════════════════════════
+//  FETCH PRICE FROM WORKER
+// ══════════════════════════════════════════════
+async function fetchPrice(ticker) {
+  try {
+    const res = await fetch(`${WORKER_URL}?ticker=${ticker}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data;
+  } catch (e) {
+    console.warn(`Price fetch failed for ${ticker}:`, e.message);
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════
+//  FETCH NEWS FROM WORKER
+// ══════════════════════════════════════════════
+async function fetchNews(ticker) {
+  try {
+    const res = await fetch(`${WORKER_URL}?news=${ticker}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    return data;
+  } catch (e) {
+    console.warn(`News fetch failed for ${ticker}:`, e.message);
+    return null;
+  }
+}
+
+// ══════════════════════════════════════════════
+//  CALL AI VIA WORKER
+// ══════════════════════════════════════════════
+async function callAI(prompt) {
+  const res = await fetch(WORKER_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt })
+  });
+  if (!res.ok) throw new Error(`AI error: ${res.status}`);
+  const data = await res.json();
+  // Handle various response formats
+  if (data.content && Array.isArray(data.content)) {
+    return data.content.map(b => b.text || '').join('');
+  }
+  if (data.text) return data.text;
+  if (data.response) return data.response;
+  return JSON.stringify(data);
+}
+
+// ══════════════════════════════════════════════
+//  FETCH ALL STOCKS
+// ══════════════════════════════════════════════
+async function fetchAllStocks() {
+  const all = [...new Set([...STOCKS.mine, ...STOCKS.compare, ...STOCKS.watch])];
+
+  // Batch fetches in parallel with a small concurrency limit
+  const BATCH = 5;
+  for (let i = 0; i < all.length; i += BATCH) {
+    const batch = all.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map(t => fetchPrice(t)));
+    results.forEach((r, idx) => {
+      const ticker = batch[idx];
+      if (r.status === 'fulfilled' && r.value) {
+        stockData[ticker] = r.value;
+        // Store price history
+        const price = parseFloat(r.value.price || r.value.regularMarketPrice || 0);
+        if (price > 0) {
+          if (!priceHistory[ticker]) priceHistory[ticker] = [];
+          priceHistory[ticker].push({ t: Date.now(), p: price });
+          if (priceHistory[ticker].length > 60) priceHistory[ticker].shift();
+        }
+      }
+    });
+    renderAllGrids();
+    updateSummary();
+    updateRockets();
+    if (selectedTicker) updateChartDisplay(selectedTicker);
+  }
+
+  updateLastUpdate();
+}
+
+// ══════════════════════════════════════════════
+//  RENDER GRID
+// ══════════════════════════════════════════════
+function renderAllGrids() {
+  renderGrid('mine', STOCKS.mine, 'badge-mine');
+  renderGrid('compare', STOCKS.compare, 'badge-compare');
+  renderGrid('watch', STOCKS.watch, 'badge-watch');
+
+  // All grid
+  const allEl = document.getElementById('grid-all');
+  allEl.innerHTML = '';
+  [...STOCKS.mine, ...STOCKS.compare, ...STOCKS.watch].forEach(t => {
+    const badgeClass = STOCKS.mine.includes(t) ? 'badge-mine'
+      : STOCKS.compare.includes(t) ? 'badge-compare' : 'badge-watch';
+    allEl.appendChild(buildCard(t, badgeClass));
+  });
+}
+
+function renderGrid(id, tickers, badgeClass) {
+  const el = document.getElementById(`grid-${id}`);
+  if (!el) return;
+  el.innerHTML = '';
+  tickers.forEach(t => el.appendChild(buildCard(t, badgeClass)));
+}
+
+function buildCard(ticker, badgeClass) {
+  const data = stockData[ticker];
+  const div = document.createElement('div');
+  div.className = 'stock-card';
+  div.id = `card-${ticker}`;
+  div.onclick = () => selectTicker(ticker);
+  if (ticker === selectedTicker) div.classList.add('selected');
+
+  if (!data) {
+    div.innerHTML = `
+      <div class="stock-header">
+        <div><div class="stock-ticker">${ticker}</div><div class="stock-name">${STOCK_NAMES[ticker]||''}</div></div>
+        <span class="stock-badge ${badgeClass}">${badgeLabel(badgeClass)}</span>
+      </div>
+      <div class="skeleton" style="height:28px;width:80%;margin-bottom:6px"></div>
+      <div class="skeleton" style="height:16px;width:55%"></div>`;
+    return div;
+  }
+
+  const price = parseFloat(data.price || data.regularMarketPrice || 0);
+  const change = parseFloat(data.change || data.regularMarketChange || 0);
+  const changePct = parseFloat(data.changePct || data.regularMarketChangePercent || 0);
+  const isUp = change >= 0;
+  const isRocket = Math.abs(changePct) >= 10;
+
+  const prePrice = parseFloat(data.preMarketPrice || 0);
+  const preChg = parseFloat(data.preMarketChange || 0);
+  const preChgPct = parseFloat(data.preMarketChangePercent || 0);
+  const postPrice = parseFloat(data.postMarketPrice || 0);
+  const postChg = parseFloat(data.postMarketChange || 0);
+  const postChgPct = parseFloat(data.postMarketChangePercent || 0);
+
+  const colorClass = isUp ? 'card-green' : change < 0 ? 'card-red' : 'card-neutral';
+  div.classList.add(colorClass);
+  if (isRocket) div.classList.add('rocket');
+
+  const fmtPrice = price > 0 ? `$${price.toFixed(price < 10 ? 3 : 2)}` : '—';
+  const fmtChange = change !== 0 ? `${change >= 0 ? '+' : ''}${change.toFixed(2)}` : '—';
+  const fmtPct = changePct !== 0 ? `${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%` : '—';
+  const chgClass = isUp ? 'change-pos' : change < 0 ? 'change-neg' : 'change-neutral';
+  const badge = isRocket ? 'badge-rocket' : badgeClass;
+  const badgeTxt = isRocket ? '🚀' : badgeLabel(badgeClass);
+
+  let extHtml = '';
+  const hasExt = (prePrice > 0 && prePrice !== price) || (postPrice > 0 && postPrice !== price);
+  if (hasExt) {
+    extHtml = `<div class="stock-ext">`;
+    if (prePrice > 0 && prePrice !== price) {
+      const cls = preChg >= 0 ? 'pos' : 'neg';
+      extHtml += `<div class="ext-row">
+        <span class="ext-label">פרה</span>
+        <span class="ext-val ${cls}">$${prePrice.toFixed(2)} (${preChgPct >= 0 ? '+' : ''}${preChgPct.toFixed(2)}%)</span>
+      </div>`;
+    }
+    if (postPrice > 0 && postPrice !== price) {
+      const cls = postChg >= 0 ? 'pos' : 'neg';
+      extHtml += `<div class="ext-row">
+        <span class="ext-label">אפטר</span>
+        <span class="ext-val ${cls}">$${postPrice.toFixed(2)} (${postChgPct >= 0 ? '+' : ''}${postChgPct.toFixed(2)}%)</span>
+      </div>`;
+    }
+    extHtml += `</div>`;
+  }
+
+  const volume = data.volume || data.regularMarketVolume;
+  const volStr = volume ? `<div class="tag-vol">Vol: ${formatVolume(volume)}</div>` : '';
+
+  div.innerHTML = `
+    <div class="stock-card-glow"></div>
+    <div class="stock-header">
+      <div>
+        <div class="stock-ticker">${ticker}</div>
+        <div class="stock-name">${STOCK_NAMES[ticker]||''}</div>
+      </div>
+      <span class="stock-badge ${badge}">${badgeTxt}</span>
+    </div>
+    <div class="stock-price">${fmtPrice}</div>
+    <div class="stock-change">
+      <span class="${chgClass}">${fmtChange}</span>
+      <span class="${chgClass}">${fmtPct}</span>
+    </div>
+    ${volStr}
+    ${extHtml}`;
+
+  return div;
+}
+
+function badgeLabel(cls) {
+  if (cls === 'badge-mine') return 'שלי';
+  if (cls === 'badge-compare') return 'השוואה';
+  if (cls === 'badge-watch') return 'מעקב';
+  return '';
+}
+
+function formatVolume(v) {
+  v = parseInt(v);
+  if (v >= 1e9) return (v/1e9).toFixed(1)+'B';
+  if (v >= 1e6) return (v/1e6).toFixed(1)+'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0)+'K';
+  return v;
+}
+
+// ══════════════════════════════════════════════
+//  SUMMARY BAR
+// ══════════════════════════════════════════════
+function updateSummary() {
+  const all = [...STOCKS.mine, ...STOCKS.compare, ...STOCKS.watch];
+  let up = 0, dn = 0, rockets = 0, mineUp = 0;
+
+  all.forEach(t => {
+    const d = stockData[t];
+    if (!d) return;
+    const chg = parseFloat(d.change || d.regularMarketChange || 0);
+    const pct = parseFloat(d.changePct || d.regularMarketChangePercent || 0);
+    if (chg > 0) up++;
+    else if (chg < 0) dn++;
+    if (Math.abs(pct) >= 10) rockets++;
+    if (STOCKS.mine.includes(t) && chg > 0) mineUp++;
+  });
+
+  const total = Object.keys(stockData).length || 1;
+  document.getElementById('sumPortfolioCount').textContent = STOCKS.mine.length;
+  document.getElementById('sumPortfolioUp').textContent = `${mineUp} עולות מתוך ${STOCKS.mine.length}`;
+  document.getElementById('sumUp').textContent = up;
+  document.getElementById('sumUpPct').textContent = `${Math.round(up/total*100)}% מהמניות`;
+  document.getElementById('sumDown').textContent = dn;
+  document.getElementById('sumDownPct').textContent = `${Math.round(dn/total*100)}% מהמניות`;
+  document.getElementById('sumRockets').textContent = rockets;
+}
+
+function updateLastUpdate() {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2,'0');
+  const m = String(now.getMinutes()).padStart(2,'0');
+  const s = String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('sumLastUpdate').textContent = `${h}:${m}:${s}`;
+}
+
+// ══════════════════════════════════════════════
+//  ROCKETS BAR
+// ══════════════════════════════════════════════
+function updateRockets() {
+  const rockets = [];
+  const all = [...STOCKS.mine, ...STOCKS.compare, ...STOCKS.watch];
+  all.forEach(t => {
+    const d = stockData[t];
+    if (!d) return;
+    const pct = parseFloat(d.changePct || d.regularMarketChangePercent || 0);
+    if (Math.abs(pct) >= 10) rockets.push({ t, pct });
+  });
+
+  rockets.sort((a,b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+  const bar = document.getElementById('rocketsBar');
+  const list = document.getElementById('rocketsList');
+
+  if (rockets.length === 0) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  list.innerHTML = rockets.map(r =>
+    `<div class="rocket-pill" onclick="selectTicker('${r.t}')">
+      <span class="r-ticker">${r.t}</span>
+      <span class="r-change">${r.pct >= 0 ? '+' : ''}${r.pct.toFixed(1)}%</span>
+    </div>`
+  ).join('');
+}
+
+// ══════════════════════════════════════════════
+//  SELECT TICKER
+// ══════════════════════════════════════════════
+function selectTicker(ticker) {
+  // Deselect previous
+  document.querySelectorAll('.stock-card.selected').forEach(el => el.classList.remove('selected'));
+  selectedTicker = ticker;
+  document.querySelectorAll(`#card-${ticker}`).forEach(el => el.classList.add('selected'));
+
+  updateChartDisplay(ticker);
+  loadNews(ticker);
+  document.getElementById('aiInput').placeholder = `שאל על ${ticker}...`;
+}
+
+// ══════════════════════════════════════════════
+//  CHART
+// ══════════════════════════════════════════════
+function updateChartDisplay(ticker) {
+  const data = stockData[ticker];
+  const history = priceHistory[ticker] || [];
+
+  document.getElementById('chartTicker').textContent = ticker;
+  document.getElementById('chartTickerName').textContent = STOCK_NAMES[ticker] || '';
+
+  const price = data ? parseFloat(data.price || data.regularMarketPrice || 0) : 0;
+  const change = data ? parseFloat(data.change || data.regularMarketChange || 0) : 0;
+  const pct = data ? parseFloat(data.changePct || data.regularMarketChangePercent || 0) : 0;
+  const isUp = change >= 0;
+
+  document.getElementById('chartPrice').textContent = price > 0 ? `$${price.toFixed(price < 10 ? 3 : 2)}` : '—';
+  document.getElementById('chartPrice').style.color = isUp ? 'var(--green)' : change < 0 ? 'var(--red)' : 'var(--text)';
+
+  const pill = document.getElementById('chartChangePill');
+  const fmtPct = pct !== 0 ? `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%` : '—';
+  pill.textContent = fmtPct;
+  pill.className = 'chart-change-pill ' + (isUp ? 'pill-green' : pct < 0 ? 'pill-red' : 'pill-neutral');
+
+  // Extended hours
+  if (data) {
+    const prePrice = parseFloat(data.preMarketPrice || 0);
+    const preChgPct = parseFloat(data.preMarketChangePercent || 0);
+    const postPrice = parseFloat(data.postMarketPrice || 0);
+    const postChgPct = parseFloat(data.postMarketChangePercent || 0);
+    const hasExt = (prePrice > 0 && prePrice !== price) || (postPrice > 0 && postPrice !== price);
+
+    const extBar = document.getElementById('extHoursBar');
+    if (hasExt) {
+      extBar.style.display = 'grid';
+      const preVal = document.getElementById('preMarketVal');
+      const preChg = document.getElementById('preMarketChg');
+      const postVal = document.getElementById('postMarketVal');
+      const postChg = document.getElementById('postMarketChg');
+
+      if (prePrice > 0 && prePrice !== price) {
+        preVal.textContent = `$${prePrice.toFixed(2)}`;
+        preVal.style.color = preChgPct >= 0 ? 'var(--green)' : 'var(--red)';
+        preChg.textContent = `${preChgPct >= 0 ? '+' : ''}${preChgPct.toFixed(2)}%`;
+        preChg.style.color = preChgPct >= 0 ? 'var(--green2)' : 'var(--red2)';
+      } else {
+        preVal.textContent = 'לא זמין';
+        preVal.style.color = 'var(--text3)';
+        preChg.textContent = '';
+      }
+
+      if (postPrice > 0 && postPrice !== price) {
+        postVal.textContent = `$${postPrice.toFixed(2)}`;
+        postVal.style.color = postChgPct >= 0 ? 'var(--green)' : 'var(--red)';
+        postChg.textContent = `${postChgPct >= 0 ? '+' : ''}${postChgPct.toFixed(2)}%`;
+        postChg.style.color = postChgPct >= 0 ? 'var(--green2)' : 'var(--red2)';
+      } else {
+        postVal.textContent = 'לא זמין';
+        postVal.style.color = 'var(--text3)';
+        postChg.textContent = '';
+      }
+    } else {
+      extBar.style.display = 'none';
+    }
+  }
+
+  renderPriceChart(ticker, history, isUp);
+}
+
+function renderPriceChart(ticker, history, isUp) {
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const color = isUp ? '#00e676' : '#ff5252';
+  const colorFade = isUp ? 'rgba(0,230,118,0)' : 'rgba(255,82,82,0)';
+
+  const labels = history.map(p => {
+    const d = new Date(p.t);
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  });
+  const values = history.map(p => p.p);
+
+  if (values.length < 2) {
+    labels.push(''); values.push(values[0] || 0);
+  }
+
+  if (priceChart) priceChart.destroy();
+  priceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: color,
+        borderWidth: 2,
+        fill: true,
+        backgroundColor: (ctx2) => {
+          const gradient = ctx2.chart.ctx.createLinearGradient(0, 0, 0, 180);
+          gradient.addColorStop(0, isUp ? 'rgba(0,230,118,0.2)' : 'rgba(255,82,82,0.2)');
+          gradient.addColorStop(1, colorFade);
+          return gradient;
+        },
+        pointRadius: 0,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: '#1c2333',
+        titleColor: '#8896aa',
+        bodyColor: '#e8edf5',
+        borderColor: '#2d3a50',
+        borderWidth: 1,
+        callbacks: { label: ctx3 => `$${ctx3.parsed.y.toFixed(3)}` }
+      }},
+      scales: {
+        x: { display: false },
+        y: {
+          display: true,
+          position: 'left',
+          grid: { color: 'rgba(36,45,61,0.6)', drawBorder: false },
+          ticks: {
+            color: '#5a6a7e',
+            font: { family: "'JetBrains Mono'", size: 10 },
+            callback: v => `$${v.toFixed(v < 1 ? 3 : 2)}`
+          }
+        }
+      }
+    }
+  });
+}
+
+// ══════════════════════════════════════════════
+//  LOAD NEWS
+// ══════════════════════════════════════════════
+async function loadNews(ticker) {
+  document.getElementById('newsTitle').textContent = `חדשות — ${ticker}`;
+  const list = document.getElementById('newsList');
+  list.innerHTML = `<div class="empty-news"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>`;
+
+  const data = await fetchNews(ticker);
+  if (!data || !data.news || data.news.length === 0) {
+    list.innerHTML = `<div class="empty-news">לא נמצאו חדשות עבור ${ticker}</div>`;
+    return;
+  }
+
+  list.innerHTML = data.news.slice(0, 15).map(item => {
+    const title = item.title || item.headline || 'ללא כותרת';
+    const source = item.publisher || item.source || 'Yahoo Finance';
+    const link = item.link || item.url || '#';
+    const ts = item.providerPublishTime || item.publishedAt;
+    const timeStr = ts ? timeAgo(ts) : '';
+
+    return `<div class="news-item" onclick="window.open('${link}','_blank')">
+      <div class="news-source-row">
+        <span class="news-source">${escHtml(source)}</span>
+        ${timeStr ? `<span class="news-time">${timeStr}</span>` : ''}
+      </div>
+      <div class="news-headline">${escHtml(title)}</div>
+    </div>`;
+  }).join('');
+}
+
+function timeAgo(ts) {
+  const now = Date.now();
+  const t = ts > 1e12 ? ts : ts * 1000;
+  const diff = Math.floor((now - t) / 1000);
+  if (diff < 60) return `לפני ${diff}ש'`;
+  if (diff < 3600) return `לפני ${Math.floor(diff/60)}ד'`;
+  if (diff < 86400) return `לפני ${Math.floor(diff/3600)}ש"`;
+  return `לפני ${Math.floor(diff/86400)}י'`;
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════════
+//  AI
+// ══════════════════════════════════════════════
+async function askAI() {
+  const input = document.getElementById('aiInput');
+  const btn = document.getElementById('aiBtn');
+  const resp = document.getElementById('aiResponse');
+  const question = input.value.trim();
+  if (!question) return;
+
+  const data = stockData[selectedTicker];
+  const price = data ? parseFloat(data.price || data.regularMarketPrice || 0) : 0;
+  const pct = data ? parseFloat(data.changePct || data.regularMarketChangePercent || 0) : 0;
+
+  const prompt = `אתה אנליסט פיננסי ישראלי מנוסה. ענה בעברית, בצורה תמציתית וממוקדת.
+מניה נבחרת: ${selectedTicker} (${STOCK_NAMES[selectedTicker] || ''})
+מחיר נוכחי: $${price.toFixed(3)}
+שינוי יומי: ${pct.toFixed(2)}%
+שאלה: ${question}`;
+
+  btn.disabled = true;
+  btn.textContent = '...';
+  resp.style.display = 'block';
+  resp.innerHTML = `<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>`;
+
+  try {
+    const answer = await callAI(prompt);
+    // Highlight ticker symbols
+    const highlighted = answer.replace(/\b([A-Z]{2,5})\b/g, (m, t) =>
+      STOCK_NAMES[t] ? `<span class="ai-ticker-tag">${t}</span>` : m
+    );
+    resp.innerHTML = highlighted;
+  } catch (e) {
+    resp.innerHTML = `<span style="color:var(--red2)">שגיאה: ${e.message}</span>`;
+    showToast(`AI error: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'שאל ✦';
+  }
+}
+
+// ══════════════════════════════════════════════
+//  MARKET STATUS
+// ══════════════════════════════════════════════
+function updateMarketStatus() {
+  const now = new Date();
+  const nyOffset = -4; // EDT (approximate - ignores DST edge cases)
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const nyNow = new Date(utc + nyOffset * 3600000);
+  const h = nyNow.getHours(), m = nyNow.getMinutes();
+  const day = nyNow.getDay();
+  const dot = document.getElementById('marketDot');
+  const txt = document.getElementById('marketStatusText');
+
+  if (day === 0 || day === 6) {
+    dot.style.background = 'var(--text3)';
+    dot.style.boxShadow = 'none';
+    txt.textContent = 'שוק סגור — סופש';
+    return;
+  }
+
+  const totalMin = h * 60 + m;
+  if (totalMin >= 4 * 60 && totalMin < 9.5 * 60) {
+    dot.style.background = 'var(--gold)';
+    dot.style.boxShadow = '0 0 8px var(--gold)';
+    txt.textContent = 'פרה-מרקט 🌅';
+  } else if (totalMin >= 9.5 * 60 && totalMin < 16 * 60) {
+    dot.style.background = 'var(--green)';
+    dot.style.boxShadow = '0 0 8px var(--green)';
+    txt.textContent = 'שוק פתוח ✅';
+  } else if (totalMin >= 16 * 60 && totalMin < 20 * 60) {
+    dot.style.background = 'var(--blue)';
+    dot.style.boxShadow = '0 0 8px var(--blue)';
+    txt.textContent = 'אפטר-מרקט 🌙';
+  } else {
+    dot.style.background = 'var(--text3)';
+    dot.style.boxShadow = 'none';
+    txt.textContent = 'שוק סגור 🌙';
+  }
+}
+
+// ══════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════
+function switchTab(id, btn) {
+  currentTab = id;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`panel-${id}`).classList.add('active');
+}
+
+// ══════════════════════════════════════════════
+//  COUNTDOWN & AUTO-REFRESH
+// ══════════════════════════════════════════════
+function startCountdown() {
+  countdown = REFRESH_INTERVAL;
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => {
+    countdown--;
+    document.getElementById('countdownDisplay').textContent = countdown;
+    if (countdown <= 0) {
+      countdown = REFRESH_INTERVAL;
+      fetchAllStocks();
+    }
+  }, 1000);
+}
+
+async function manualRefresh() {
+  countdown = REFRESH_INTERVAL;
+  document.getElementById('countdownDisplay').textContent = countdown;
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  await fetchAllStocks();
+  btn.classList.remove('spinning');
+}
+
+// ══════════════════════════════════════════════
+//  SKELETONS
+// ══════════════════════════════════════════════
+function renderSkeletons() {
+  ['mine','compare','watch'].forEach(id => {
+    const tickers = STOCKS[id];
+    const el = document.getElementById(`grid-${id}`);
+    if (!el) return;
+    el.innerHTML = tickers.map(t => `
+      <div class="stock-card">
+        <div class="stock-header">
+          <div>
+            <div class="stock-ticker">${t}</div>
+            <div class="stock-name" style="height:12px;width:80px" class="skeleton"></div>
+          </div>
+        </div>
+        <div class="skeleton" style="height:28px;width:75%;margin-bottom:6px"></div>
+        <div class="skeleton" style="height:16px;width:55%"></div>
+      </div>`).join('');
+  });
+}
+
+// ══════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════
+function showToast(msg, type = '') {
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+</script>
+
+</body>
+</html>
