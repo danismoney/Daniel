@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dani's Money - Live Markets + After Hours</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+    }
+    body {
+        background: #0a0f1a;
+        color: #eef2ff;
+        font-family: 'Inter', system-ui, sans-serif;
+        padding: 16px;
+        padding-top: max(16px, env(safe-area-inset-top, 16px));
+        padding-bottom: 40px;
+    }
+    .container {
+        max-width: 1300px;
+        margin: 0 auto;
+    }
+    .key-screen {
+        position: fixed;
+        inset: 0;
+        background: #0a0f1a;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+    .key-card {
+        background: #111827;
+        border: 1px solid #2d3a5e;
+        border-radius: 28px;
+        padding: 28px 22px;
+        width: 100%;
+        max-width: 380px;
+    }
+    button {
+        font-family: inherit;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .tab-btn {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.08);
+        padding: 10px 0;
+        border-radius: 14px;
+        font-weight: 500;
+        font-size: 13px;
+        color: #9ca3af;
+    }
+    .tab-btn.active {
+        background: rgba(99,179,237,0.12);
+        border-color: rgba(99,179,237,0.5);
+        color: #63b3ed;
+    }
+    .stock-card {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.06);
+        border-radius: 20px;
+        padding: 16px;
+        transition: 0.2s;
+    }
+    .stock-card:hover {
+        background: rgba(99,179,237,0.05);
+        transform: translateY(-2px);
+        border-color: rgba(99,179,237,0.2);
+    }
+    .price-up { color: #4ade80; }
+    .price-down { color: #f87171; }
+    .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #4ade80;
+        border-radius: 50%;
+        animation: pulse 1.2s infinite;
+        margin-left: 6px;
+    }
+    .after-hours-badge {
+        background: rgba(251,191,36,0.2);
+        color: #fbbf24;
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 20px;
+        margin-right: 6px;
+    }
+    @keyframes pulse {
+        0%,100% { opacity: 0.4; }
+        50% { opacity: 1; }
+    }
+    .toast {
+        position: fixed;
+        bottom: 24px;
+        left: 16px;
+        right: 16px;
+        background: #111827e6;
+        backdrop-filter: blur(12px);
+        border-radius: 40px;
+        padding: 12px 20px;
+        text-align: center;
+        font-size: 13px;
+        z-index: 999;
+        transition: 0.2s;
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .simulator-input {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 40px;
+        padding: 8px 12px;
+        width: 100%;
+        font-size: 12px;
+        color: white;
+        margin-top: 8px;
+    }
+    .profit-badge {
+        background: rgba(74,222,128,0.1);
+        border-radius: 40px;
+        padding: 4px 10px;
+        font-size: 11px;
+        margin-top: 8px;
+        text-align: center;
+        color: #4ade80;
+    }
+    .sector-group {
+        margin-bottom: 28px;
+    }
+    .sector-title {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        padding-right: 8px;
+        border-right: 3px solid #63b3ed;
+    }
+</style>
+</head>
+<body>
+
+<div id="keyScreen" class="key-screen" style="display: none;">
+    <div class="key-card">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 44px;">💰</div>
+            <div style="font-weight: 700; font-size: 22px;">Dani's Money</div>
+            <div style="color: #6b7280; font-size: 13px;">הכנס API Key של Finnhub (חינמי, נתונים אמיתיים)</div>
+            <a href="https://finnhub.io/register" target="_blank" style="color: #60a5fa; font-size: 11px;">📌 קבל מפתח חינם →</a>
+        </div>
+        <input type="password" id="finnhubKeyInput" placeholder="cXXXXXXXXXXXX" style="width:100%; background:#1f2937; border:1px solid #374151; border-radius: 16px; padding: 12px 16px; color: white; font-family: monospace; margin-bottom: 12px;">
+        <div id="keyError" style="color: #f87171; font-size: 12px; margin-bottom: 12px; display: none;"></div>
+        <button id="saveKeyBtn" style="width:100%; background: #2563eb; border: none; border-radius: 40px; padding: 12px; color: white; font-weight: 600;">שמור והפעל</button>
+        <div style="font-size: 10px; color: #4b5563; text-align: center; margin-top: 16px;">🔒 המפתח נשמר בדפדפן · המחירים מתעדכנים אוטומטית (כולל After hours)</div>
+    </div>
+</div>
+
+<div id="appRoot" class="container"></div>
+
+<script>
+    // ---------- UTILS ----------
+    function formatPrice(p) {
+        if (p === null || p === undefined) return '—';
+        if (p < 0.1) return p.toFixed(4);
+        if (p < 1) return p.toFixed(3);
+        return p.toFixed(2);
+    }
+    function formatMoney(n) {
+        return '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+    function showToast(msg, type = 'info') {
+        let toast = document.getElementById('globalToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'globalToast';
+            toast.className = 'toast';
+            document.body.appendChild(toast);
+        }
+        const color = type === 'error' ? '#f87171' : (type === 'success' ? '#4ade80' : '#60a5fa');
+        toast.style.borderLeft = `4px solid ${color}`;
+        toast.textContent = msg;
+        toast.style.opacity = '1';
+        clearTimeout(window.toastTimeout);
+        window.toastTimeout = setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+    }
+
+    // ---------- API CONFIG ----------
+    let finnhubApiKey = localStorage.getItem('dm_finnhub_key') || '';
+
+    // ---------- LIVE PRICE (Finnhub) + After hours support ----------
+    async function fetchFinnhubQuote(ticker) {
+        if (!finnhubApiKey) return null;
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 6000);
+            const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${finnhubApiKey}`;
+            const res = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeout);
+            if (!res.ok) return null;
+            const data = await res.json();
+            if (!data || data.c === undefined) return null;
+            // Finnhub gives: c = current, dp = day change %, pc = previous close
+            // Also after hours: data.c might be same as regular, but we can detect via market state? Finnhub doesn't give explicit state.
+            // We'll add a note if after hours likely active (after 16:00 ET)
+            const now = new Date();
+            const hourET = new Date(now.toLocaleString('en-US', {timeZone: 'America/New_York'})).getHours();
+            const isAfterHours = hourET >= 16 || hourET < 9;
+            return {
+                price: data.c,
+                change: data.dp ?? 0,
+                afterHoursPrice: isAfterHours ? data.c : null,
+                afterHoursChange: isAfterHours ? data.dp : null,
+                prePrice: null,
+                preChangePct: null,
+                state: isAfterHours ? 'AFTER_HOURS' : 'REGULAR'
+            };
+        } catch (err) {
+            return null;
+        }
+    }
+
+    // Fallback to Yahoo via proxy (includes after hours data)
+    async function fetchYahooFull(ticker) {
+        try {
+            const proxy = 'https://api.allorigins.win/get?url=';
+            const target = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
+            const res = await fetch(proxy + encodeURIComponent(target));
+            if (!res.ok) return null;
+            const wrapper = await res.json();
+            const data = JSON.parse(wrapper.contents);
+            const result = data.chart?.result?.[0];
+            if (!result) return null;
+            const meta = result.meta;
+            const regularPrice = meta.regularMarketPrice;
+            const previousClose = meta.previousClose;
+            const change = ((regularPrice - previousClose) / previousClose) * 100;
+            const postMarketPrice = meta.postMarketPrice;
+            const postMarketChange = meta.postMarketChangePercent;
+            const preMarketPrice = meta.preMarketPrice;
+            const preMarketChange = meta.preMarketChangePercent;
+            const marketState = meta.marketState || 'REGULAR';
+            const isAfter = marketState === 'POST' || marketState === 'CLOSED';
+            return {
+                price: regularPrice,
+                change: change,
+                afterHoursPrice: isAfter ? (postMarketPrice || regularPrice) : null,
+                afterHoursChange: isAfter ? (postMarketChange || 0) : null,
+                prePrice: preMarketPrice,
+                preChangePct: preMarketChange,
+                state: marketState
+            };
+        } catch (err) {
+            return null;
+        }
+    }
+
+    async function fetchLivePrice(ticker) {
+        let data = await fetchFinnhubQuote(ticker);
+        if (data && data.price) return data;
+        data = await fetchYahooFull(ticker);
+        if (data && data.price) return data;
+        return null;
+    }
+
+    async function fetchAllPrices(tickers) {
+        const results = await Promise.allSettled(tickers.map(async t => {
+            const data = await fetchLivePrice(t);
+            return { ticker: t, data };
+        }));
+        const map = {};
+        results.forEach(r => {
+            if (r.status === 'fulfilled' && r.value?.data) {
+                map[r.value.ticker] = r.value.data;
+            }
+        });
+        return map;
+    }
+
+    // ---------- EXTENDED STOCK DATABASE (over 60 stocks, grouped by sector for comparison) ----------
+    const ALL_STOCKS = {
+        // myport (original)
+        SMX: { name: 'SMX Security Matters', sector: 'ביטחון', section: 'myport' },
+        PGY: { name: 'Pagaya Technologies', sector: 'פינטק', section: 'myport' },
+        QUBT: { name: 'Quantum Computing', sector: 'קוונטים', section: 'myport' },
+        BYND: { name: 'Beyond Meat', sector: 'מזון', section: 'myport' },
+        LUMN: { name: 'Lumen Technologies', sector: 'תקשורת', section: 'myport' },
+        MNDY: { name: 'monday.com', sector: 'SaaS', section: 'myport' },
+        // compare - cars
+        LI: { name: 'Li Auto', sector: 'רכב סיני', section: 'compare', group: 'cars' },
+        LCID: { name: 'Lucid Motors', sector: 'רכב חשמלי', section: 'compare', group: 'cars' },
+        F: { name: 'Ford Motor', sector: 'רכב', section: 'compare', group: 'cars' },
+        TSLA: { name: 'Tesla', sector: 'רכב חשמלי', section: 'compare', group: 'cars' },
+        RIVN: { name: 'Rivian', sector: 'רכב חשמלי', section: 'compare', group: 'cars' },
+        NIO: { name: 'NIO', sector: 'רכב סיני', section: 'compare', group: 'cars' },
+        // tech giants
+        AAPL: { name: 'Apple', sector: 'טכנולוגיה', section: 'compare', group: 'tech' },
+        MSFT: { name: 'Microsoft', sector: 'טכנולוגיה', section: 'compare', group: 'tech' },
+        GOOGL: { name: 'Alphabet', sector: 'טכנולוגיה', section: 'compare', group: 'tech' },
+        META: { name: 'Meta', sector: 'מדיה', section: 'compare', group: 'tech' },
+        NVDA: { name: 'NVIDIA', sector: 'שבבים', section: 'compare', group: 'tech' },
+        AMD: { name: 'AMD', sector: 'שבבים', section: 'compare', group: 'tech' },
+        // fintech
+        PYPL: { name: 'PayPal', sector: 'פינטק', section: 'compare', group: 'fintech' },
+        SQ: { name: 'Block', sector: 'פינטק', section: 'compare', group: 'fintech' },
+        SOFI: { name: 'SoFi', sector: 'פינטק', section: 'compare', group: 'fintech' },
+        // energy
+        SEDG: { name: 'SolarEdge', sector: 'אנרגיה', section: 'compare', group: 'energy' },
+        ENPH: { name: 'Enphase', sector: 'אנרגיה', section: 'compare', group: 'energy' },
+        // watchlist
+        APP: { name: 'AppLovin', sector: 'פרסום', section: 'watch', watchScore: 8, watchNote: 'צמיחה חזקה בפרסום דיגיטלי' },
+        SMCI: { name: 'Super Micro', sector: 'שרתים', section: 'watch', watchScore: 7, watchNote: 'ביקוש AI' },
+        OPEN: { name: 'Opendoor', sector: 'נדל"ן', section: 'watch', watchScore: 6, watchNote: 'מומנטום בשוק הדיור' },
+        PLTR: { name: 'Palantir', sector: 'AI', section: 'watch', watchScore: 8, watchNote: 'חוזים ממשלתיים' },
+        ASTS: { name: 'AST SpaceMobile', sector: 'תקשורת', section: 'watch', watchScore: 7, watchNote: 'טכנולוגיה פורצת דרך' },
+        // additional stocks for "rockets" (pre-market movers)
+        TELO: { name: 'Telomir Pharma', sector: 'ביוטק', section: 'rockets' },
+        HOLO: { name: 'MicroCloud Hologram', sector: 'טכנולוגיה', section: 'rockets' },
+        MBIO: { name: 'Mustang Bio', sector: 'ביוטק', section: 'rockets' },
+        GRML: { name: 'Greenland Mines', sector: 'כרייה', section: 'rockets' },
+        ASTI: { name: 'Ascent Solar', sector: 'אנרגיה', section: 'rockets' },
+    };
+
+    const SECTIONS = {
+        myport: { label: '📁 תיק שלי', accent: '#a78bfa', rgb: '167,139,250' },
+        compare: { label: '📊 השוואה לפי מגזר', accent: '#63b3ed', rgb: '99,179,237' },
+        watch: { label: '👁 מעקב חכם', accent: '#f6ad55', rgb: '246,173,85' },
+        rockets: { label: '🚀 טסות (Pre/After)', accent: '#68d391', rgb: '104,211,145' }
+    };
+
+    // ---------- PORTFOLIO ----------
+    const DEFAULT_LOTS = [
+        { id: 1, ticker: 'SMX', shares: 3000, buy: 5.10, sell: null, done: false, date: '2024-01-15' },
+        { id: 2, ticker: 'SMX', shares: 3000, buy: 1.67, sell: null, done: false, date: '2024-06-20' },
+        { id: 3, ticker: 'PGY', shares: 3000, buy: 13.97, sell: null, done: false, date: '2024-03-10' },
+        { id: 4, ticker: 'QUBT', shares: 4500, buy: 11.15, sell: null, done: false, date: '2024-04-05' },
+        { id: 5, ticker: 'BYND', shares: 7500, buy: 1.68, sell: null, done: false, date: '2024-02-28' },
+        { id: 6, ticker: 'LUMN', shares: 1500, buy: 8.06, sell: null, done: false, date: '2024-05-12' },
+        { id: 7, ticker: 'MNDY', shares: 63, buy: 181.03, sell: null, done: false, date: '2023-11-20' }
+    ];
+
+    let state = {
+        currentTab: 'myport',
+        searchQuery: '',
+        livePrices: {},
+        portfolioLots: null,
+        aiSummary: 'טוען סיכום שוק...',
+    };
+
+    function loadPortfolio() {
+        const stored = localStorage.getItem('dm_portfolio_lots');
+        if (stored) {
+            try { state.portfolioLots = JSON.parse(stored); } catch(e) {}
+        }
+        if (!state.portfolioLots) state.portfolioLots = JSON.parse(JSON.stringify(DEFAULT_LOTS));
+    }
+    function savePortfolio() { localStorage.setItem('dm_portfolio_lots', JSON.stringify(state.portfolioLots)); }
+
+    // ---------- AUTO REFRESH ----------
+    let refreshTimer = null;
+    async function refreshPrices(showMsg = true) {
+        if (!finnhubApiKey) {
+            if (showMsg) showToast('⚠️ נא להגדיר Finnhub API Key', 'error');
+            return;
+        }
+        const tickers = Object.keys(ALL_STOCKS);
+        if (showMsg) showToast('מעדכן מחירים...', 'info');
+        const newPrices = await fetchAllPrices(tickers);
+        if (Object.keys(newPrices).length === 0) {
+            showToast('⚠️ לא התקבלו מחירים (בדוק API Key)', 'error');
+        } else {
+            state.livePrices = { ...state.livePrices, ...newPrices };
+            showToast(`✅ ${Object.keys(newPrices).length} מחירים התעדכנו`, 'success');
+        }
+        renderApp();
+    }
+    function startAutoRefresh() {
+        if (refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => refreshPrices(false), 15000);
+        refreshPrices(true);
+    }
+
+    // ---------- ROCKETS LOGIC (stocks with pre-market increase > 3% or after hours surge) ----------
+    function getRocketStocks() {
+        return Object.keys(ALL_STOCKS).filter(ticker => {
+            const live = state.livePrices[ticker];
+            if (!live || !live.price) return false;
+            const preChange = live.preChangePct || 0;
+            const afterChange = live.afterHoursChange || 0;
+            const dayChange = live.change || 0;
+            // rockets: pre-market up > 3% OR after hours up > 2% OR day change > 8%
+            return preChange > 3 || afterChange > 2 || dayChange > 8;
+        }).map(t => ({ ticker: t, data: state.livePrices[t] }));
+    }
+
+    // ---------- SIMULATOR (profit calculator) ----------
+    function getProfitSimulation(stockPrice, investment) {
+        if (!stockPrice || stockPrice <= 0) return null;
+        // assume user buys at current price, sells at target price (current price * 1.5 for example? but we'll let user define)
+        // Actually we'll provide a simple: "if stock rises X%"
+        // Better: user enters target price or % gain? I'll implement as: enter amount, and a target price (or multiple).
+        // For now: in card, user enters $ amount, and we show profit if price goes to +50%, +100%, +200%
+        const targets = [1.5, 2, 3];
+        return targets.map(mult => ({
+            mult: mult,
+            targetPrice: stockPrice * mult,
+            profit: (stockPrice * mult - stockPrice) * (investment / stockPrice)
+        }));
+    }
+
+    // ---------- RENDER UI (with groups for compare) ----------
+    function renderApp() {
+        const root = document.getElementById('appRoot');
+        if (!root) return;
+
+        const section = SECTIONS[state.currentTab] || SECTIONS.myport;
+        const accentColor = section.accent;
+
+        let filteredTickers = Object.keys(ALL_STOCKS).filter(t => ALL_STOCKS[t].section === state.currentTab);
+        if (state.currentTab === 'rockets') {
+            const rockets = getRocketStocks();
+            filteredTickers = rockets.map(r => r.ticker);
+        } else {
+            filteredTickers = filteredTickers.filter(t => {
+                const q = state.searchQuery.trim().toLowerCase();
+                if (!q) return true;
+                return t.toLowerCase().includes(q) || ALL_STOCKS[t].name.toLowerCase().includes(q);
+            });
+        }
+
+        // Build group mapping for compare tab
+        let groups = {};
+        if (state.currentTab === 'compare') {
+            filteredTickers.forEach(t => {
+                const stock = ALL_STOCKS[t];
+                const groupKey = stock.group || stock.sector || 'אחר';
+                if (!groups[groupKey]) groups[groupKey] = [];
+                groups[groupKey].push(t);
+            });
+        }
+
+        root.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <span style="font-size: 26px; font-weight: 800;">Dani's <span style="color: #63b3ed;">Money</span></span>
+                    <div style="font-size: 11px; color: #6b7280;">After Hours · Pre-Market · עדכונים חיים</div>
+                </div>
+                <div style="display: flex; gap: 12px;">
+                    <button id="refreshBtn" style="background: #1f2937; border: none; border-radius: 40px; padding: 8px 16px; color: white;">🔄 רענן</button>
+                    <button id="portfolioBtn" style="background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.3); border-radius: 40px; padding: 8px 18px; color: #a78bfa; font-weight: 600;">💼 תיק</button>
+                    <button id="keySettingsBtn" style="background: transparent; border: 1px solid #374151; border-radius: 40px; padding: 8px 12px;">🔑</button>
+                </div>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <input type="text" id="searchInput" placeholder="🔍 חיפוש מניה..." value="${state.searchQuery.replace(/"/g, '&quot;')}" style="width:100%; background:#111827; border:1px solid #2d3a5e; border-radius: 30px; padding: 12px 18px; color: white; font-size: 14px;">
+            </div>
+            <div style="display: flex; gap: 8px; margin-bottom: 24px; overflow-x: auto; padding-bottom: 4px;">
+                ${Object.entries(SECTIONS).map(([key, sec]) => `
+                    <button class="tab-btn ${state.currentTab === key ? 'active' : ''}" data-tab="${key}" style="white-space: nowrap;">${sec.label}</button>
+                `).join('')}
+            </div>
+            ${state.currentTab === 'compare' ? 
+                Object.entries(groups).map(([groupName, tickers]) => `
+                    <div class="sector-group">
+                        <div class="sector-title">${groupName}</div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;">
+                            ${tickers.map(t => renderStockCard(t, accentColor)).join('')}
+                        </div>
+                    </div>
+                `).join('') :
+                `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px;">
+                    ${filteredTickers.map(t => renderStockCard(t, accentColor)).join('')}
+                </div>`
+            }
+            ${filteredTickers.length === 0 ? `<div style="text-align: center; padding: 60px; color: #6b7280;">🔍 לא נמצאו מניות</div>` : ''}
+            <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #374151;">Dani's Money · נתונים מ-Finnhub & Yahoo Finance · אין ייעוץ השקעות</div>
+        `;
+
+        // attach events
+        document.getElementById('refreshBtn')?.addEventListener('click', () => refreshPrices(true));
+        document.getElementById('portfolioBtn')?.addEventListener('click', openPortfolioModal);
+        document.getElementById('keySettingsBtn')?.addEventListener('click', () => {
+            localStorage.removeItem('dm_finnhub_key');
+            localStorage.removeItem('dm_anthropic_key');
+            showToast('נא להכניס מחדש Finnhub API Key', 'info');
+            setTimeout(() => location.reload(), 1000);
+        });
+        document.getElementById('searchInput')?.addEventListener('input', (e) => {
+            state.searchQuery = e.target.value;
+            renderApp();
+        });
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                state.currentTab = e.currentTarget.dataset.tab;
+                state.searchQuery = '';
+                renderApp();
+            });
+        });
+        document.querySelectorAll('.simulate-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const ticker = btn.dataset.ticker;
+                const amount = parseFloat(document.getElementById(`invest_${ticker}`)?.value);
+                if (isNaN(amount) || amount < 100 || amount > 10000) {
+                    showToast('הכנס סכום בין 100 ל-10,000 דולר', 'error');
+                    return;
+                }
+                const price = state.livePrices[ticker]?.price;
+                if (!price) return;
+                const targets = [1.5, 2, 3];
+                let msg = `💰 השקעה $${amount} ב-$${formatPrice(price)}:\n`;
+                targets.forEach(m => {
+                    const newPrice = price * m;
+                    const shares = amount / price;
+                    const profit = shares * (newPrice - price);
+                    msg += `🔹 עליה ל-$${formatPrice(newPrice)} → רווח $${formatMoney(profit)}\n`;
+                });
+                alert(msg);
+            });
+        });
+    }
+
+    function renderStockCard(ticker, accentColor) {
+        const stock = ALL_STOCKS[ticker];
+        const live = state.livePrices[ticker] || {};
+        const price = live.price ?? 0;
+        const change = live.change ?? 0;
+        const afterPrice = live.afterHoursPrice;
+        const afterChange = live.afterHoursChange;
+        const prePrice = live.prePrice;
+        const preChange = live.preChangePct;
+        const afterBadge = afterPrice ? `<span class="after-hours-badge">🌙 After ${afterChange>0?'▲':'▼'} ${Math.abs(afterChange).toFixed(2)}%</span>` : '';
+        const preBadge = prePrice ? `<span class="after-hours-badge">☀️ Pre ${preChange>0?'▲':'▼'} ${Math.abs(preChange).toFixed(2)}%</span>` : '';
+        const isLive = !!live.price;
+        return `
+            <div class="stock-card" data-ticker="${ticker}">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                            <span style="font-weight: 700; font-size: 17px; color: ${acceptColor};">${ticker}</span>
+                            <span style="font-size: 10px; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 30px;">${stock.sector}</span>
+                            ${isLive ? '<span class="live-dot"></span>' : ''}
+                            ${preBadge} ${afterBadge}
+                        </div>
+                        <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">${stock.name}</div>
+                        ${stock.watchNote ? `<div style="font-size: 11px; margin-top: 6px; color: #f6ad55;">💡 ${stock.watchNote}</div>` : ''}
+                    </div>
+                    <div style="text-align: left;">
+                        <div style="font-size: 18px; font-weight: 700;">$${formatPrice(price)}</div>
+                        <div style="font-size: 13px; font-weight: 600; ${change >= 0 ? 'color: #4ade80' : 'color: #f87171'}">${change >= 0 ? '▲' : '▼'} ${Math.abs(change).toFixed(2)}%</div>
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <input type="number" id="invest_${ticker}" placeholder="השקעה ($100-$10000)" class="simulator-input" min="100" max="10000" step="100">
+                    <button class="simulate-btn" data-ticker="${ticker}" style="width:100%; margin-top: 8px; background: #3b82f6; border: none; border-radius: 40px; padding: 8px; color: white; font-size: 12px;">📈 חשב רווח פוטנציאלי (+50%, +100%, +200%)</button>
+                </div>
+                <button class="analyzeBtn" data-ticker="${ticker}" style="width:100%; margin-top: 8px; background: rgba(99,179,237,0.1); border: 1px solid rgba(99,179,237,0.2); border-radius: 40px; padding: 8px; color: #63b3ed; font-size: 12px;">📊 גרף + ניתוח AI</button>
+            </div>
+        `;
+    }
+
+    // ---------- PORTFOLIO MODAL ----------
+    function openPortfolioModal() {
+        const lots = state.portfolioLots.map(lot => {
+            const live = state.livePrices[lot.ticker];
+            const price = live?.price ?? 0;
+            if (lot.done) {
+                const pnl = (lot.sell - lot.buy) * lot.shares;
+                return { ...lot, pnl, pnlPct: ((lot.sell - lot.buy) / lot.buy) * 100, currentPrice: lot.sell };
+            }
+            const cost = lot.buy * lot.shares;
+            const value = price * lot.shares;
+            const pnl = value - cost;
+            const pnlPct = cost ? (pnl / cost) * 100 : 0;
+            return { ...lot, currentPrice: price, cost, value, pnl, pnlPct };
+        });
+        const active = lots.filter(l => !l.done);
+        const closed = lots.filter(l => l.done);
+        const totalValue = active.reduce((s,l) => s + (l.value || 0), 0);
+        const totalCost = active.reduce((s,l) => s + (l.cost || 0), 0);
+        const totalPnl = totalValue - totalCost;
+        const totalPnlPct = totalCost ? (totalPnl/totalCost)*100 : 0;
+        const realizedPnl = closed.reduce((s,l) => s + (l.pnl || 0), 0);
+        const modalHtml = `
+            <div id="portfolioModal" style="position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px;">
+                <div style="background:#0f172a; border-radius:32px; width:100%; max-width:560px; max-height:80vh; overflow-y:auto; padding:24px;">
+                    <div style="display:flex; justify-content:space-between;"><h2>💼 תיק השקעות</h2><button id="closePortfolioBtn" style="background:#1e293b; border:none; border-radius:40px; width:36px;">✕</button></div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#0a0f1a; border-radius:20px; padding:16px; margin:16px 0;">
+                        <div><div style="color:#94a3b8;">שווי</div><div style="font-size:20px;">${formatMoney(totalValue)}</div></div>
+                        <div><div style="color:#94a3b8;">רווח/הפסד</div><div style="font-size:20px; ${totalPnl>=0?'color:#4ade80':'color:#f87171'}">${totalPnl>=0?'+':''}${formatMoney(totalPnl)} (${totalPnlPct.toFixed(1)}%)</div></div>
+                        <div><div style="color:#94a3b8;">ממומש</div><div>${formatMoney(realizedPnl)}</div></div>
+                    </div>
+                    ${active.map(lot => `
+                        <div style="background:#1e293b; border-radius:16px; padding:12px; margin-bottom:12px;">
+                            <div><b>${lot.ticker}</b> • ${lot.shares} מניות • קניה $${formatPrice(lot.buy)}</div>
+                            <div>מחיר נוכחי: $${formatPrice(lot.currentPrice)} • <span class="${lot.pnl>=0?'price-up':'price-down'}">${lot.pnl>=0?'+':''}${formatMoney(lot.pnl)} (${lot.pnlPct.toFixed(1)}%)</span></div>
+                            <div><input type="text" id="sellPrice_${lot.id}" placeholder="מחיר מכירה" style="background:#0f172a; border-radius:40px; padding:6px; width:100px;"> <button class="sellLotBtn" data-id="${lot.id}" style="background:#3b82f6; border:none; border-radius:40px; padding:6px 12px;">מכור</button></div>
+                        </div>
+                    `).join('')}
+                    <button id="addLotBtn" style="width:100%; background:#334155; border:none; border-radius:40px; padding:12px;">➕ הוסף עסקה</button>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        document.getElementById('closePortfolioBtn')?.addEventListener('click', () => document.getElementById('portfolioModal')?.remove());
+        document.querySelectorAll('.sellLotBtn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = parseInt(btn.dataset.id);
+                const input = document.getElementById(`sellPrice_${id}`);
+                const sellPrice = parseFloat(input.value);
+                if (isNaN(sellPrice) || sellPrice <= 0) return showToast('הכנס מחיר מכירה תקין', 'error');
+                const idx = state.portfolioLots.findIndex(l => l.id === id);
+                if (idx !== -1 && !state.portfolioLots[idx].done) {
+                    state.portfolioLots[idx].sell = sellPrice;
+                    state.portfolioLots[idx].done = true;
+                    savePortfolio();
+                    document.getElementById('portfolioModal')?.remove();
+                    openPortfolioModal();
+                    renderApp();
+                }
+            });
+        });
+        document.getElementById('addLotBtn')?.addEventListener('click', () => {
+            const newId = Math.max(0, ...state.portfolioLots.map(l => l.id)) + 1;
+            state.portfolioLots.push({ id: newId, ticker: 'AAPL', shares: 100, buy: 150, sell: null, done: false, date: new Date().toISOString().slice(0,10) });
+            savePortfolio();
+            document.getElementById('portfolioModal')?.remove();
+            openPortfolioModal();
+            renderApp();
+        });
+    }
+
+    // ---------- BOOT ----------
+    window.onload = () => {
+        const savedFinnhub = localStorage.getItem('dm_finnhub_key');
+        if (!savedFinnhub) {
+            document.getElementById('keyScreen').style.display = 'flex';
+            document.getElementById('saveKeyBtn').onclick = () => {
+                const key = document.getElementById('finnhubKeyInput').value.trim();
+                if (key.length < 10) {
+                    document.getElementById('keyError').textContent = 'מפתח Finnhub לא תקין';
+                    document.getElementById('keyError').style.display = 'block';
+                    return;
+                }
+                localStorage.setItem('dm_finnhub_key', key);
+                finnhubApiKey = key;
+                document.getElementById('keyScreen').style.display = 'none';
+                startApp();
+            };
+        } else {
+            finnhubApiKey = savedFinnhub;
+            startApp();
+        }
+    };
+
+    function startApp() {
+        loadPortfolio();
+        startAutoRefresh();
+        renderApp();
+    }
+</script>
+</body>
+</html>
